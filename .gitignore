@@ -47,3 +47,16 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Quarto output
+/.quarto/
+**/*.quarto_ipynb
+
+# Quarto output
+*.html
+*_files/
+
+*scratch.R
+
+# macOS
+.DS_Store
