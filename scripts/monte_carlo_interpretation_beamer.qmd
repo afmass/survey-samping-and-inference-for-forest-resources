@@ -1,0 +1,234 @@
+---
+title: "Monte Carlo Interpretation"
+author: "Alexander Massey"
+format:
+  beamer:
+    theme: "Madrid"
+    colortheme: "default"
+    aspectratio: 169
+    slide-level: 2
+    keep-tex: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| include: false
+knitr::opts_chunk$set(fig.width=7,fig.height=7,fig.align="center", dev="png",dpi=220,out.width="100%")
+set.seed(42)
+xlim<-c(-2,12)
+ylim<-c(-2,12)
+forest_xlim <- c(0,10)
+forest_ylim <- c(0,10)
+n_trees<-20
+trees<-data.frame(x=runif(n_trees,-2,12),y=runif(n_trees,-2,12))
+sample_point<-c(x=4.3,y=5.8)
+r<-2.6
+theta<-seq(0,2*pi,length.out=200)
+selected<-sqrt((trees$x-sample_point["x"])^2+(trees$y-sample_point["y"])^2)<=r
+draw_circle<-function(cx,cy,rad,...){
+ lines(cx+rad*cos(theta),cy+rad*sin(theta),...)
+}
+```
+
+## Sample unit is a point
+
+:::: {.columns}
+::: {.column width="58%"}
+```{r}
+par(mar=c(0,0,0,0))
+plot(trees$x,trees$y,type="n",xlim=xlim,ylim=ylim,axes=FALSE,asp=1,xlab="",ylab="")
+points(trees$x[!selected],trees$y[!selected],pch=17,col="gray60",cex=1.5)
+points(trees$x[selected],trees$y[selected],pch=17,col="forestgreen",cex=1.5)
+draw_circle(sample_point["x"],sample_point["y"],r,col="black",lwd=2)
+points(sample_point["x"],sample_point["y"],pch=4,col="black",cex=2.2,lwd=3)
+```
+:::
+::: {.column width="42%"}
+\footnotesize
+\begin{itemize}
+    \item A circular plot is centered on the \textbf{sample point} selects trees inside the inclusion radius.
+    \item[] 
+    \item Multiple inclusion radii are possible based on DBH thresholds.
+    \item[]
+    \item There are infinite points in the forest.
+    \item[]
+    \item \textbf{Finite population sampling theory} is commonly used but the problem is poorly posed.
+    \item[]
+    \item Circles do not tesselate! Angle count sampling makes no sense...
+\end{itemize}
+:::
+::::
+
+## \textbf{Workaround:} Draw same inclusion rings around trees
+
+:::: {.columns}
+::: {.column width="58%"}
+```{r}
+par(mar=c(0,0,0,0))
+plot(trees$x,trees$y,type="n",xlim=xlim,ylim=ylim,axes=FALSE,asp=1,xlab="",ylab="")
+for(i in which(selected)){
+ xx<-trees$x[i]+r*cos(theta)
+ yy<-trees$y[i]+r*sin(theta)
+ polygon(xx,yy,col=adjustcolor("forestgreen",alpha.f=.25),border=NA)
+ lines(xx,yy,col="forestgreen",lwd=1.5,lty=2)
+}
+points(trees$x[!selected],trees$y[!selected],pch=17,col="gray60",cex=1.5)
+points(trees$x[selected],trees$y[selected],pch=17,col="forestgreen",cex=1.5)
+points(sample_point["x"],sample_point["y"],pch=4,col="black",cex=2.2,lwd=3)
+```
+:::
+::: {.column width="42%"}
+\footnotesize
+\begin{itemize}
+    \item \textbf{Duality principle}: trees in radius around point same as point in radius around trees.
+    \item[]
+    \item Overlap of the inclusion rings illustrates density accumulation at a point.
+    \item[]
+    \item Consider finite $N$ trees in forest area $F$ indexed by $i$.
+    \item[]
+    \item $x$ is a point around which we measure some parameter $Y(x)$.
+    \item[]
+    \item $\lambda (F)$ is surface area of $F$ and $\lambda (K_i)$ surface area around inclusion circle around tree $i$
+\end{itemize}
+:::
+::::
+
+## Boundary adjustment on trees (not plots)
+
+:::: {.columns}
+::: {.column width="58%"}
+```{r}
+#| dev.args:
+#|   bg: "transparent"
+par(mar=c(0,0,0,0),xpd=NA)
+plot(trees$x,trees$y,type="n",xlim=xlim,ylim=ylim,axes=FALSE,asp=1,xlab="",ylab="")
+dist<-pmin(trees$x-xlim[1],xlim[2]-trees$x,trees$y-ylim[1],ylim[2]-trees$y)
+sel<-which(selected); border_i<-sel[which.min(dist[sel])]
+points(trees$x[-border_i],trees$y[-border_i],pch=17,col="gray60",cex=1.5)
+points(trees$x[border_i],trees$y[border_i],pch=17,col="forestgreen",cex=1.5)
+usr<-par("usr"); shade<-adjustcolor("grey93",alpha.f=.45)
+rect(usr[1],usr[3],forest_xlim[1],usr[4],col=shade,border=NA)
+rect(forest_xlim[2],usr[3],usr[2],usr[4],col=shade,border=NA)
+rect(forest_xlim[1],usr[3],forest_xlim[2],forest_ylim[1],col=shade,border=NA)
+rect(forest_xlim[1],forest_ylim[2],forest_xlim[2],usr[4],col=shade,border=NA)
+rect(forest_xlim[1],forest_ylim[1],forest_xlim[2],forest_ylim[2],border="black",lwd=2)
+xx<-trees$x[border_i]+r*cos(theta)
+yy<-trees$y[border_i]+r*sin(theta)
+clip(forest_xlim[1],forest_xlim[2],forest_ylim[1],forest_ylim[2])
+polygon(xx,yy,col=adjustcolor("forestgreen",alpha.f=.25),border=NA)
+do.call("clip",as.list(usr))
+lines(xx,yy,col="forestgreen",lwd=2,lty=2)
+points(trees$x[border_i],trees$y[border_i],pch=17,bg="white",col="forestgreen",cex=1.5,lwd=2)
+```
+:::
+::: {.column width="42%"}
+\footnotesize
+- Plots with centers outside forest (gray) are **not visited** for budget reasons.
+
+- Requires boundary adjustment for **trees**.
+
+\begin{definition}[Indicator variable]
+\[
+  I_i(x)=
+  \begin{cases}
+  1,&\text{if }x\in K_i,\\
+  0,&\text{if }x\notin K_i.
+  \end{cases}
+\]
+\end{definition}
+
+\begin{definition}[Inclusion probability]
+\[
+  \pi_i = P[I_i(x)] = E[I_i(x)] =
+  \frac{\lambda(K_i \cap F)}{\lambda(F)}
+\]
+\end{definition}
+
+$K_i$
+: inclusion ring around tree $i$
+
+$\lambda(...)$
+: surface area of ...
+:::
+::::
+
+## Local density surface from above
+
+:::: {.columns}
+::: {.column width="58%"}
+```{r}
+#| dev.args:
+#|   bg: "transparent"
+par(mar=c(0,0,0,0),xpd=NA)
+plot(trees$x,trees$y,type="n",xlim=xlim,ylim=ylim,axes=FALSE,asp=1,xlab="",ylab="")
+in_box <- (trees$x >= forest_xlim[1] & trees$x <= forest_xlim[2]) & (trees$y >= forest_ylim[1] & trees$y <= forest_ylim[2])
+dist<-pmin(trees$x-xlim[1],xlim[2]-trees$x,trees$y-ylim[1],ylim[2]-trees$y)
+sel<-which(selected); border_i<-sel[which.min(dist[sel])]
+points(trees$x[!selected],trees$y[!selected],pch=17,col="gray60",cex=1.5)
+points(trees$x[in_box],trees$y[in_box],pch=17,col="black",cex=1.5)
+usr<-par("usr"); shade<-adjustcolor("grey93",alpha.f=.45)
+rect(usr[1],usr[3],forest_xlim[1],usr[4],col=shade,border=NA)
+rect(forest_xlim[2],usr[3],usr[2],usr[4],col=shade,border=NA)
+rect(forest_xlim[1],usr[3],forest_xlim[2],forest_ylim[1],col=shade,border=NA)
+rect(forest_xlim[1],forest_ylim[2],forest_xlim[2],usr[4],col=shade,border=NA)
+rect(forest_xlim[1],forest_ylim[1],forest_xlim[2],forest_ylim[2],border="black",lwd=2)
+
+for(i in which(in_box)){
+xx<-trees$x[i]+r*cos(theta)
+yy<-trees$y[i]+r*sin(theta)
+clip(forest_xlim[1],forest_xlim[2],forest_ylim[1],forest_ylim[2])
+polygon(xx,yy,col=adjustcolor("forestgreen",alpha.f=.25),border=NA)
+do.call("clip",as.list(usr))
+points(trees$x[in_box],trees$y[in_box],pch=17,bg="white",col="forestgreen",cex=1.5,lwd=2)  
+}
+
+for(i in which(in_box)){
+xx<-trees$x[i]+r*cos(theta)
+yy<-trees$y[i]+r*sin(theta)
+clip(forest_xlim[1],forest_xlim[2],forest_ylim[1],forest_ylim[2])
+# polygon(xx,yy,col=adjustcolor("forestgreen",alpha.f=.25),border=NA)
+do.call("clip",as.list(usr))
+lines(xx,yy,col="forestgreen",lwd=2,lty=2)
+}
+points(sample_point["x"],sample_point["y"],pch=4,col="black",cex=2.2,lwd=3)
+```
+:::
+::: {.column width="42%"}
+\footnotesize
+
+The surface is fixed, but the point selection is random.
+
+\begin{definition}[Local density surface]
+
+\[
+Y(x)=\frac{1}{\lambda(F)}\sum_{i=1}^N\frac{I_i(x)Y_i}{\pi_i}
+\]
+
+\end{definition}
+
+$Y_i$
+: measurement for tree $i$
+
+$\pi_i$
+: inclusion probability for tree $i$
+
+$N$
+: number of trees in forest $F$
+
+$I_i(x)$
+: indicator that tree $i$ is selected at $x$
+
+$\lambda(F)$
+: surface area of forest $F$
+
+
+\begin{block}{Interpretation}
+
+$Y(x)$ is the Horvitz--Thompson estimator with sample size one.
+
+\end{block}
+:::
+::::
