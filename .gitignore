@@ -54,7 +54,7 @@ rsconnect/
 
 # Quarto output
 *.html
-*_files/
+*.pdf
 
 *scratch.R
 
