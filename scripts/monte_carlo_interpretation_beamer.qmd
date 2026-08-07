@@ -82,17 +82,20 @@ points(sample_point["x"],sample_point["y"],pch=4,col="black",cex=2.2,lwd=3)
 :::
 ::: {.column width="42%"}
 \footnotesize
+\begin{definition}[Duality principle]
+trees in radius around point same as point in radius around trees.
+\end{definition}
 \begin{itemize}
-    \item \textbf{Duality principle}: trees in radius around point same as point in radius around trees.
     \item[]
     \item Overlap of the inclusion rings illustrates density accumulation at a point.
     \item[]
-    \item Consider finite $N$ trees in forest area $F$ indexed by $i$.
+    \item Sample unit is the point; not the trees.
     \item[]
-    \item $x$ is a point around which we measure some parameter $Y(x)$.
-    \item[]
-    \item $\lambda (F)$ is surface area of $F$ and $\lambda (K_i)$ surface area around inclusion circle around tree $i$
 \end{itemize}
+
+$x$
+: point at plot center
+
 :::
 ::::
 
@@ -152,6 +155,9 @@ $K_i$
 
 $\lambda(...)$
 : surface area of ...
+
+$F$
+: forest domain of interest
 :::
 ::::
 
@@ -198,9 +204,8 @@ points(sample_point["x"],sample_point["y"],pch=4,col="black",cex=2.2,lwd=3)
 :::
 ::: {.column width="42%"}
 \footnotesize
-
-The surface is fixed, but the point selection is random.
-
+\centering
+\textbf{\underline{Surface is fixed; point is random}}
 \begin{definition}[Local density surface]
 
 \[
