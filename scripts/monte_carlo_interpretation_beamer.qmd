@@ -1,10 +1,9 @@
 ---
-title: "Model-assisted estimation for forest inventories"
-subtitle: "A Monte Carlo approach"
-author:
-  - name: "Alexander Massey"
-    institute: "IGN -- Géodata Paris"
-date: today # Or a specific date like "2026-08-31" or "August 31, 2026"
+title: "Model-assisted estimation under the Monte Carlo approach"
+subtitle: "From the external model assumption to the classical regression estimator"
+author: "Alexander Massey"
+institute: "IGN -- Géodata Paris"
+date: today
 format:
   beamer:
     theme: "Madrid"
@@ -12,6 +11,13 @@ format:
     aspectratio: 169
     slide-level: 2
     keep-tex: true
+    include-in-header:
+      - text: |
+          \definecolor{ForestGreen}{HTML}{228B22}
+          \definecolor{BlockBlue}{RGB}{52, 101, 164}
+          \definecolor{BlockGreen}{RGB}{60, 130, 90}
+          \definecolor{BlockOrange}{RGB}{210, 120, 45}
+          \definecolor{BlockPurple}{RGB}{125, 80, 150}
 execute:
   echo: false
   warning: false
@@ -493,67 +499,24 @@ Draw $x \in s$, $n$ times, uniformly and independently.
 
 Every point estimator has a population variance estimated by a (sample) variance estimator.
 
+## Pros and cons of one-phase estimation
 
-## Short view of the classical survey sampling theory (Cordy, 1993)
+\textcolor{ForestGreen}{\textbf{Pros}}
 
-\footnotesize
+- **Simple and robust:** the sample mean is consistent by the LLN
+- **Few assumptions:** only sampling design and error-free measurements are required
+- **Straightforward inference:** confidence intervals follow from the CLT
+  $$
+  \hat Y \pm z_{1-\alpha/2}\sqrt{\widehat{\mathbb V}(\hat Y)}
+  $$
 
-- For fixed sample size $n$, denote the sample $s = \{x_1, x_2, \dots, x_n\} \subset T$.
-- Under \textbf{uniform i.i.d.} sampling, every $x_k$ has the same marginal density $f(x) = 1/A_T$.
-- The **sampling intensity** (inclusion prob. from finite theory) is
-$$
-\pi(x) = \sum_{k=1}^n f(x) = n\,f(x) = \frac{n}{A_T}, \qquad x \in T
-$$
-- The **second-order sampling intensity** (probability of a pair being jointly sampled) is
-$$
-\pi(x,x') = \sum_{k=1}^n\sum_{j\neq k} f(x)f(x') = n(n-1)\,f(x)f(x') = \frac{n(n-1)}{A_T^2}, \qquad x \neq x'
-$$
+\textcolor{red}{\textbf{Cons**}}
 
-\pause
+- **Asymptotic:** good approximation requires a sufficiently large \($n$\)
+- **Inefficient:** ignores information beyond the sampled \($Y(x)$\)
 
-\begin{block}{Note}
-General survey sampling allows $f_k(x)$ to vary by draw or be non-uniform (importance sampling, unequal probability designs). Under uniform i.i.d.\ sampling both intensities collapse to constants --- they don't depend on $x$ at all.
-\end{block}
-
-## Horvitz--Thompson estimator and Yates--Grundy variance
-
-\footnotesize
-
-\begin{block}{General form}
-\[
-\hat Y = \sum_{x \in s} w(x)\,Y(x)
-\]
-The \textbf{Horvitz--Thompson estimator} sets $w(x) = 1/\pi(x)$ and is design-unbiased whenever $\pi(x) > 0$ for all $x \in T$.
-\end{block}
-
-\pause
-
-\begin{block}{Yates--Grundy variance estimator}
-Unbiased under regularity conditions (most notably fixed $n$ and $\pi(x,x') > 0$):
-\[
-\hat{\mathbb{V}}(\hat Y_\pi) = -\frac{1}{2}\sum_{x \in s}\sum_{x' \neq x} \frac{\pi(x,x') - \pi(x)\pi(x')}{\pi(x,x')} \left(\frac{Y(x)}{\pi(x)} - \frac{Y(x')}{\pi(x')}\right)^2
-\]
-\end{block}
-
-## Several minutes later...
-
-\begin{block}{Plug in uniform i.i.d.\ intensities}
-With $\pi(x) = n/A_T$ and $\pi(x,x') = n(n-1)/A_T^2$, tedious algebra recovers exactly what we already had from Monte Carlo integration:
-\[
-\hat Y_\pi = A_T \cdot \hat Y_{1p} = A_T \cdot \frac{1}{n}\sum_{x \in s} Y(x)
-\qquad\qquad
-\hat{\mathbb{V}}(\hat Y_\pi) = \hat{\mathbb{V}}[\hat Y_{1p}] = \frac{\hat{\mathbb{V}}[Y(x)]}{n}
-\]
-\end{block}
-
-\pause
-
-\begin{block}{Why bother?}
-This is how most people construct their understanding for forest inventory sampling (although usually for finite population theory). 
-
----
-
-The \textbf{Monte Carlo approach} lets you more easily visualize, build intuition and derive a surprising number of valuable estimators.
+\begin{block}{\textbf{How can we do better ?}}
+Improve precision with known auxiliary information ("\textit{Model-assisted estimation}").
 \end{block}
 
 ## Model-assisted estimation under the Monte Carlo approach
@@ -629,15 +592,18 @@ local_density$diff <- abs(residuals(fit))
 sampled_plots$Y_hat <- approx(CHM$loc, CHM$Y_hat, xout = sampled_plots$x)$y
 
 p5 <- ggplot() +
-  geom_line(data = local_density, aes(x = x, y = y_scaled), color = "red", linewidth = 1) +
+  geom_line(data = local_density, aes(x = x, y = y_scaled, linetype = "Y"), color = "red", linewidth = 1) +
   geom_ribbon(data = local_density, aes(x = x, ymin = 0, ymax = Y_hat*scale_factor), fill = "blue", alpha = 0.5) +
   geom_line(data = local_density, aes(x = x, y = Y_hat*scale_factor, linetype = "Y_hat"), color = "blue", linewidth = 1.5) +
-  scale_linetype_manual(name = "", values = c("Y_hat" = "solid"),
-                         labels = expression(hat(Y)(x) == Z(x)^t~beta)) +
+  scale_linetype_manual(name = "", 
+                        values = c("Y" = "solid", "Y_hat" = "solid"),
+                        labels = c("Y" = expression(Y(x)), "Y_hat" = expression(hat(Y)(x)))
+                        ) +
   geom_segment(aes(x = 0, xend = lambda_F, y = 0, yend = 0), linewidth = 1.5) +
   ylim(min(trees$y), max(trees$height)) +
   ggtitle("Predicted density surface \n (\"known\" integral)") +
   theme_void() +
+  guides(linetype = guide_legend(direction = "horizontal", nrow = 1)) +
   theme(plot.title = element_text(hjust = 0.5, size = 20),
         legend.position = c(0.5, 0.1),
         legend.text = element_text(size = 18),
@@ -651,12 +617,13 @@ p6 <- ggplot() +
   geom_segment(aes(x = 0, xend = lambda_F, y = 0, yend = 0), linewidth = 1.5) +
   ylim(min(trees$y), max(trees$height)) +
   geom_point(data = sampled_plots, aes(x = x, y = 0), shape = 4, size = 3, color = "black", stroke = 1.5) +
-  geom_point(data = sampled_plots, aes(x = x, y = y, color = "Observed Y(x)"), shape = 20, size = 3, stroke = 1.5) +
+  geom_point(data = sampled_plots, aes(x = x, y = y, color = "Observed"), shape = 20, size = 3, stroke = 1.5) +
   geom_point(data = sampled_plots, aes(x = x, y = Y_hat*scale_factor, color = "Predicted"), shape = 20, size = 3, stroke = 1.5) +
   geom_segment(data = sampled_plots, aes(x = x, y = pmin(y, Y_hat*scale_factor), xend = x, yend = pmax(y, Y_hat*scale_factor)),
                color = "black", linewidth = 1) +
-  ggtitle("MC integration on residual") +
-  scale_color_manual(name = "", values = c("Observed Y(x)" = "red", "Predicted" = "blue")) +
+  ggtitle(bquote(atop("MC integration on residual",
+                    R(x) == Y(x) - hat(Y)(x)))) +
+  scale_color_manual(name = "", values = c("Observed" = "red", "Predicted" = "blue")) +
   theme_void() +
   theme(plot.title = element_text(hjust = 0.5, size = 20),
         legend.position = c(0.5, 0.065),
@@ -672,8 +639,12 @@ p4 + p5 + p6
 \begingroup
 \renewcommand{\arraystretch}{1.6}
 \begin{tabular}{@{}p{0.30\textwidth} r c l@{}}
-\textcolor{blue}{\textbf{Sampling design}} &
-  \multicolumn{3}{l}{Uniform iid sampling} \\[1.5em]
+\textcolor{black}{\textbf{Sampling design}} &
+  \multicolumn{3}{l}{Uniform iid sampling} \\[0em]
+  
+\textcolor{black}{\textbf{Assisting model}} &
+  $\hat{Y}(x)$ & $:=$ &
+  $\displaystyle m(x)$ \quad \text{(any model fit indep. of s)} \\[2em]
 
 \textcolor{blue}{\textbf{Point estimator}} &
   $\hat{Y}_{diff}$ & $=$ &
@@ -692,6 +663,8 @@ p4 + p5 + p6
 \endgroup
 
 ## \textbf{Example}: "Model-assisted" using plug-in estimation:
+Consider a linear model : 
+\vspace{2em}
 $$
 \begin{array}{c @{\hspace{2cm}} l}
 \begin{aligned}
@@ -703,13 +676,13 @@ Y(x):= \mathbf{Z}(x)^t\boldsymbol{\beta} + R(x)
 \hspace{1.5cm}
 \hat{R}(x) = Y(x) - \hat{Y}(x)
 \end{aligned}
-& \text{\textcolor{blue}{\textit{Plug-ins}}}
+& \text{\textcolor{blue}{\textit{Plug-in to }}} \textcolor{blue}{\hat{Y}_{diff}}
 \end{array}
 $$
 
 \begin{itemize}
 \item[-] $\hat{\boldsymbol{\beta}}$ fit independently of $s$ (i.e. external) $\implies$ exactly design-unbiased.
-\item[-] $\hat{\boldsymbol{\beta}}$ fit includes $s$ (i.e. internal) $\implies$ asy. design-unbiased (for "most" choices of $\hat{\boldsymbol{\beta}}$).
+\item[-] $\hat{\boldsymbol{\beta}}_s$ fit includes $s$ (i.e. internal) $\implies$ asy. design-unbiased (for "most" choices of $\hat{\boldsymbol{\beta}}_s$).
 \begin{itemize}
 \item[] \textcolor{gray}{Note: better variance estimators likely exist (g-weight, bootstrap, etc)}
 \end{itemize}
@@ -726,7 +699,7 @@ An assisting model $\hat{Y}(x) = \hat m(x)$ is \textbf{external} if the training
 
 \pause
 
-- If the model is external, the $\hat{\bar{Y}}_{diff}$ and variance estimator are \textbf{exactly design-unbiased}.
+- If the model is external, the $\hat{Y}_{diff}$ and variance estimator are \textbf{exactly design-unbiased}.
 - This holds for \textbf{any} model class $\hat m(\cdot)$ --- parametric or not:
   - Linear regression
   - $k$NN
@@ -735,6 +708,28 @@ An assisting model $\hat{Y}(x) = \hat m(x)$ is \textbf{external} if the training
   - $\dots$ and anything else you can fit externally.
 - The model can be \textbf{\textit{wrong}} because it simply shifts the Monte Carlo integration to the residuals.
 - Precision increases if $\mathbb{V}[Y(x)]>\mathbb{V}[R(x)]$.
+
+## Close your eyes and treat internal as external...
+
+\begin{block}{The "external model assumption"}
+If an \textbf{internal} model (fit using $s$ itself, or data dependent on it) is \textit{treated as if} it were external, we are making the \textbf{external model assumption}.
+\end{block}
+
+\begin{itemize}
+\setlength{\itemsep}{0.2cm}
+
+\item Only \textbf{asymptotically} design-unbiased results for most reasonable model classes.
+
+\item Asymptotic validity is likely but not automatic --- \textbf{someone has to do the work} to demonstrate it holds for the specific model class being used.
+
+\item See Breidt \& Opsomer, 2017 for demonstration for many modern modeling classes.
+\end{itemize}
+
+\pause
+
+\begin{block}{Takeaway}
+\textit{External} $\implies$ exact design-unbiasedness, no restrictions on the model. \newline \textit{Internal, assumed external} $\implies$ asymptotic unbiasedness when justified for model-class.
+\end{block}
 
 ## Internal models are not fixed under different sampling realizations
 
@@ -786,24 +781,381 @@ p_seed3 <- make_p5(4, "Seed 3")
 p_seed1 + p_seed2 + p_seed3
 ```
 
-## Close your eyes and treat internal as external...
+## How do we account for the internal-fit contribution to variance?
+\underline{Two common approaches:}
+\vspace{0.7em}
 
-\begin{block}{The "external model assumption"}
-If an \textbf{internal} model (fit using $s$ itself, or data dependent on it) is \textit{treated as if} it were external, we are making the \textbf{external model assumption}.
-\end{block}
+\begin{columns}[T,onlytextwidth]
+
+\begin{column}{0.47\textwidth}
+\textbf{Bootstrap}
+
+\vspace{0.4em}
+
+Refit model in each bootstrap sample.
+
+\vspace{0.8em}
 
 \begin{itemize}
-\setlength{\itemsep}{0.2cm}
-
-\item Only \textbf{asymptotically} design-unbiased results for most reasonable model classes.
-
-\item Asymptotic validity is likely but not automatic --- \textbf{someone has to do the work} to demonstrate it holds for the specific model class being used.
-
-\item See Breidt \& Opsomer, 2017 for demonstration for many modern modeling classes.
+  \item SRS with replacement \vspace{0.5em}
+  \item Repeat entire modeling procedure \vspace{0.5em}
+  \item Very simple and generalizable \vspace{0.5em}
+  \item Cumbersome for many territories and/or parameters
 \end{itemize}
+\end{column}
+
+\begin{column}{0.47\textwidth}
+\textbf{Specify a model class}
+
+\vspace{0.4em}
+
+e.g.\ linear regression
+
+\vspace{0.8em}
+
+\begin{itemize}
+  \item Taylor approximation for $\hat\beta_s$ around $\beta$ \vspace{0.5em}
+  \item This is called the \textbf{g-weight} variance \vspace{0.5em}
+  \item Good statistical properties \newline (i.e. \textit{calibration})
+\end{itemize}
+\end{column}
+
+\end{columns}
+
+## Design-based covariance of $\hat{\boldsymbol{\beta}}$
+
+For a \textbf{linear model},
+\vspace{-.2em}
+
+$$
+Y(x)
+=
+\mathbf{Z}(x)^\top \boldsymbol{\beta}
++
+R(x) \qquad\qquad\qquad
+\hat{\boldsymbol{\beta}}
+=
+\left\{
+\frac{1}{n}
+\sum_{x \in s}
+\mathbf{Z}(x)\mathbf{Z}(x)^\top
+\right\}^{-1}
+\frac{1}{n}
+\sum_{x \in s}
+\mathbf{Z}(x)Y(x)
+$$
+
+
+\vspace{0.3em}
+
+By a \textbf{first-order Taylor expansion} (see Mandallaz p. 124-125 for derivation),
+
+$$
+\hat{\boldsymbol{\beta}}
+-
+\boldsymbol{\beta}
+\approx
+\mathbf{A}_s^{-1}
+\frac{1}{n}
+\sum_{x \in s}
+R(x)\mathbf{Z}(x) \qquad \text{where we define \quad} \mathbf{A}_s
+:=
+\frac{1}{n}
+\sum_{x \in s}
+\mathbf{Z}(x)\mathbf{Z}(x)^\top
+$$
+
+\vspace{0.3em}
+
+Under uniform iid sampling an asymptotic \textbf{design-based covariance estimate} for $\hat{\beta}_s$,
+
+$$
+\hat\Sigma_{\hat{\boldsymbol{\beta}}_s}
+\approx
+\mathbf{A}_s^{-1}
+\left[
+\frac{1}{n^2}
+\Sigma_{x \in s}
+\hat{R}(x)^2
+\mathbf{Z}(x)\mathbf{Z}(x)^t
+\right]
+\mathbf{A}_s^{-1}
+$$
+
+## The classical regression estimator
+
+\begingroup
+\renewcommand{\arraystretch}{1.55}
+\begin{tabular}{@{}p{0.30\textwidth} r c l@{}}
+
+\textcolor{black}{\textbf{Sampling design}} &
+  \multicolumn{3}{l}{\hspace{.3em} Uniform iid sampling} \\[0em]
+
+\textcolor{black}{\textbf{Assisting model}} &
+  $\hat{Y}(x)$ & $:=$ &
+  $\displaystyle \mathbf{Z}(x)^t\hat{\boldsymbol{\beta}}_s + R(x)$ \\[1.5em]
+
+\textcolor{black}{\textbf{IMPORTANT property}} &
+  $\frac{1}{n}\sum_{x \in s}\hat R(x)$ & $=$ & $0
+  \quad
+  \text{if intercept included in model fit on }s$
+  \\[1.5em]
+
+\textcolor{blue}{\textbf{Point estimator}} &
+  $\hat{Y}_{reg}$ & $=$ &
+  $\displaystyle
+  \bar{\mathbf Z}^{\,t}\hat{\boldsymbol{\beta}}_s \qquad \text{where} \quad \bar{\mathbf Z}:=\frac{1}{A_T}\int_T\mathbf Z(x)\,dx$
+  \\[1.5em]
+
+\textcolor{blue}{\textbf{Variance estimator}} &
+  $\hat{\mathbb V}[\hat{Y}_{reg}]$ & $=$ &
+  $\displaystyle
+  \bar{\mathbf Z}^{\,t}
+  \hat\Sigma_{\hat{\boldsymbol{\beta}}_s}
+  \bar{\mathbf Z} \qquad \text{(accounts for internal fit)}$
+
+\end{tabular}
+\endgroup
+
+## Classical regression estimator has good statistical properties...
+
+Defined $g(x)=\bar{\mathbf Z}^{\,t}\mathbf A_s^{-1}\mathbf Z(x)$ and re-write
+as :
+$$
+\boxed{
+\hat{Y}_{reg}
+=
+\frac{1}{n}\sum_{x\in s} g(x)\,Y(x)
+}
+\qquad\qquad\qquad
+\boxed{
+\hat{\mathbb V}[\hat{Y}_{reg}]
+=
+\frac{1}{n^2}
+\sum_{x\in s}g(x)^2\hat R(x)^2
+}
+$$
+
+\begin{block}{Calibration properties of g-weights}
+
+$$
+\frac{1}{n}\sum_{x\in s}g(x)\mathbf Z(x)
+=
+\bar{\mathbf Z}
+\qquad\qquad\qquad
+\frac{1}{n}\sum_{x\in s}g(x)=1
+$$
+\end{block}
+
+\centering
+The g-weighted sample exactly reproduces the known population means in the auxiliary vector. \newline\newline 
+\pause
+**Great news if $\mathbf Z(x)$ and $Y(x)$ are well-correlated!**
+
+## Post-stratification
+
+\textbf{Post-stratification} : classical regression estimation with categorical variables (i.e. ANOVA).
+\vspace{-.15em}
+$$
+\boxed{
+\hat Y_{reg}
+=
+\sum_{h=1}^H p_h\,\bar Y_{s,h}
+}
+\qquad
+\text{where}
+\qquad
+p_h=\frac{A_h}{A_T},
+\quad
+n_h := \#\text{ of plots in stratum } h.
+$$
+\begin{columns}[T]
+
+\column{0.48\textwidth}
+\begin{block}{External plug-in approach}
+\[
+\widehat{\mathbb V}_{\mathrm{ext}}
+=
+\frac{1}{n}
+\sum_h
+\frac{n_h-1}{n-1}s_{R,h}^2
+\]
+\end{block}
+\centering
+\textcolor{red}{\textbf{Disturbing features}}
+
+\begin{itemize}
+\item Strata weights based on sample, not population.
+\item Strata variance is proportional to $n_h$.
+\end{itemize}
+
+\column{0.48\textwidth}
+\begin{block}{g-weight variance}
+\[
+\widehat{\mathbb V}_{g}
+=
+\sum_h
+\frac{p_h^2}{n_h}s_{R,h}^2
+\]
+\end{block}
+\centering
+\textcolor{ForestGreen}{\textbf{Better calibration properties}}
+
+\begin{itemize}
+\item Uses the \textbf{known census proportions} $p_h$.
+\item Stratum variance is proportional to $\frac{1}{n_h}$
+\end{itemize}
+
+\end{columns}
+
+
+## Special cases of the classical regression estimator
+
+With **known wall-to-wall auxiliary information**, several important \underline{special cases} arise:
+\vspace{.3cm}
+
+\begin{columns}[T]
+
+\column{0.47\textwidth}
+
+{
+\setbeamercolor{block title}{fg=white,bg=BlockBlue}
+\setbeamercolor{block body}{fg=black,bg=BlockBlue!8}
+\begin{block}{One-phase estimation}
+\begin{itemize}
+\item Intercept only
+\item No auxiliary information required
+\end{itemize}
+\end{block}
+}
+
+{
+\setbeamercolor{block title}{fg=white,bg=BlockGreen}
+\setbeamercolor{block body}{fg=black,bg=BlockGreen!8}
+\begin{block}{Post-stratification}
+\begin{itemize}
+\item Categorical variables only
+\item ANOVA model
+\item Extremely common in NFIs
+\end{itemize}
+\end{block}
+}
+
+\column{0.47\textwidth}
+
+{
+\setbeamercolor{block title}{fg=white,bg=BlockOrange}
+\setbeamercolor{block body}{fg=black,bg=BlockOrange!8}
+\begin{block}{Regression estimation}
+\begin{itemize}
+\item Continuous variables only
+\item Multiple linear regression w/ intercept
+\end{itemize}
+\end{block}
+}
+
+{
+\setbeamercolor{block title}{fg=white,bg=BlockPurple}
+\setbeamercolor{block body}{fg=black,bg=BlockPurple!8}
+\begin{block}{Regression within strata}
+\begin{itemize}
+\item Categorical + continuous variables
+\item Different intercepts by stratum
+\item Interactions allow different slopes
+\end{itemize}
+\end{block}
+}
+
+\end{columns}
+
+\vspace{.4cm}
+
+\centering
+\textit{Don't choose a special case --- choose the model to minimize residuals.}
+
+\vfill
+\footnotesize
+\textbf{NOTE:} We only need to implement the g-weight variance formula once!
+
+## Conclusion
+
+### Today
+
+\begin{itemize}
+\item \textbf{Model-assisted estimation} improves precision by exploiting known totals/means of auxiliary information.
+\item Fundamentally \textbf{design-based}: the model shifts the estimation problem to the residuals.
+\item The model can be wrong — the estimator remains \textbf{(asymptotically) design-unbiased}.
+\end{itemize}
+
+\vspace{.5cm}
+
+### Tomorrow
+
+\begin{itemize}
+\item \textbf{Multi-phase sampling}: auxiliary information available at \textbf{multiple sampling intensities}, rather than exhaustively wall-to-wall.
+\item Examine model-assisted techniques for \textbf{small-area estimation}.
+\end{itemize}
+
+## BONUS: a taste of the classical survey sampling theory (Cordy, 1993)
+<!-- \begin{block}{Other approaches} -->
+<!-- Most people don't use the Monte Carlo approach to learn this material.  This is the classical setup to the problem. -->
+<!-- \end{block} -->
+\footnotesize
+
+- For fixed sample size $n$, denote the sample $s = \{x_1, x_2, \dots, x_n\} \subset T$.
+- Under \textbf{uniform i.i.d.} sampling, every $x_k$ has the same marginal density $f(x) = 1/A_T$.
+- The **sampling intensity** (\textit{inclusion prob.} from finite theory) is
+$$
+\pi(x) = \sum_{k=1}^n f(x) = n\,f(x) = \frac{n}{A_T}, \qquad x \in T
+$$
+- The **second-order sampling intensity** (\textit{inclusion prob.} of a pair being jointly sampled) is
+$$
+\pi(x,x') = \sum_{k=1}^n\sum_{j\neq k} f(x)f(x') = n(n-1)\,f(x)f(x') = \frac{n(n-1)}{A_T^2}, \qquad x \neq x'
+$$
 
 \pause
 
-\begin{block}{Takeaway}
-\textit{External} $\implies$ exact design-unbiasedness, no restrictions on the model. \newline \textit{Internal, assumed external} $\implies$ asymptotic unbiasedness when justified for model-class.
+\begin{block}{Note}
+General survey sampling allows $f_k(x)$ to vary by draw or be non-uniform (importance sampling, unequal probability designs). Under uniform i.i.d.\ sampling both intensities collapse to constants --- they don't depend on $x$ at all.
+\end{block}
+
+## Horvitz--Thompson estimator and Yates--Grundy variance
+
+\footnotesize
+
+\begin{block}{General form}
+\[
+\hat Y = \sum_{x \in s} w(x)\,Y(x)
+\]
+The \textbf{Horvitz--Thompson estimator} sets $w(x) = 1/\pi(x)$ and is design-unbiased whenever $\pi(x) > 0$ for all $x \in T$.
+\end{block}
+
+\pause
+
+\begin{block}{Yates--Grundy variance estimator}
+Unbiased under regularity conditions (most notably fixed $n$ and $\pi(x,x') > 0$):
+\[
+\hat{\mathbb{V}}(\hat Y_\pi) = -\frac{1}{2}\sum_{x \in s}\sum_{x' \neq x} \frac{\pi(x,x') - \pi(x)\pi(x')}{\pi(x,x')} \left(\frac{Y(x)}{\pi(x)} - \frac{Y(x')}{\pi(x')}\right)^2
+\]
+\end{block}
+
+## Several minutes later...
+
+\begin{block}{Plug in uniform i.i.d.\ intensities}
+With $\pi(x) = n/A_T$ and $\pi(x,x') = n(n-1)/A_T^2$, tedious algebra recovers exactly what we already had from Monte Carlo integration:
+\[
+\hat Y_\pi = A_T \cdot \hat Y_{1p} = A_T \cdot \frac{1}{n}\sum_{x \in s} Y(x)
+\qquad\qquad
+\hat{\mathbb{V}}(\hat Y_\pi) = \hat{\mathbb{V}}[\hat Y_{1p}] = \frac{\hat{\mathbb{V}}[Y(x)]}{n}
+\]
+\end{block}
+
+\pause
+
+\begin{block}{Why bother?}
+This is how most people construct their understanding for forest inventory sampling (although usually for finite population theory). 
+
+---
+
+The \textbf{Monte Carlo approach} lets you more easily visualize, build intuition and derive a surprising number of valuable estimators.
 \end{block}
