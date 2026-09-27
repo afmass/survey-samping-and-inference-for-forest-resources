@@ -19,11 +19,11 @@
 /*.Rcheck/
 
 # RStudio files
-.Rproj.user/
+#.Rproj.user/
 
 # produced vignettes
-vignettes/*.html
-vignettes/*.pdf
+scripts/*.html
+scripts/*.pdf
 
 # OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
 .httr-oauth
@@ -53,10 +53,11 @@ rsconnect/
 **/*.quarto_ipynb
 
 # Quarto output
-*.html
-*.pdf
+# *.html
+# *.pdf
 
 *scratch.R
 
 # macOS
 .DS_Store
+.Rproj.user

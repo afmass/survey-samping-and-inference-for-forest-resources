@@ -1,0 +1,389 @@
+---
+title: "Exercise: Monte Carlo Integration"
+subtitle: "An interactive review"
+author: "Alexander Massey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+---
+
+
+```{r}
+#| label: setup
+#| include: false
+
+library(ggplot2)
+library(dplyr)
+
+set.seed(2026)
+```
+
+# Introduction
+
+Monte Carlo integration is a way to approximate a definite integral using
+random sampling.  It turns an integration problem into an estimation problem: draw random
+points, evaluate the function at those points, and average. 
+
+As the sample size grows, the **Law of Large Numbers (LLN)** tells us that the estimate converges to the true value and the **Central Limit Theorem (CLT)** tells us the asymptotic distribution of our estimate based on a finite sample size.
+
+In this exercise, you'll be provided a smooth wiggly function to estimate.  You will plot it, make an estimate of its integral by taking a random sample, and build a confidence interval for your estimate.  At the end of the exercise, we will check by simulation whether that confidence interval behaves the way the CLT promises it should.
+
+# The Monte Carlo Integral
+
+Suppose we want to estimate
+
+$$
+I = \int_a^b f(x)\, dx.
+$$
+
+If $x$'s are drawn independently from a $\text{Uniform}(a,b)$
+distribution, then the $f(x)$'s are i.i.d. random variables with
+
+$$
+E[f(x)] = \int_a^b f(x)\,\left(\frac{1}{b-a}\right)\, dx = \frac{I}{b-a}.
+$$
+
+Rearranging, the natural **Monte Carlo estimate** of $I$ is
+
+$$
+\hat{I}_n = (b-a) \cdot \frac{1}{n}\sum_{x \in s} f(x).
+$$
+
+In words: the integral is (width of the interval) $\times$ (average height of
+the function). By the LLN, $\hat{I}_n \to I$
+as $n \to \infty$.
+
+# The Function
+
+We'll work with the function
+
+$$
+f(x)=1+2\cdot\sin(\frac{x}{2})\cdot e^{-x/6}
+$$
+In a new R script, copy---paste this function in and put it into memory (highlight it and press ctr/cmd + enter)
+```{r}
+#| label: define-f
+
+f <- function(x) 1 + 2 * sin(x / 2) * exp(-x / 6)
+```
+
+Our objective is to integrate $f(x)$ over the interval $x\in[1, 9]$.
+
+## Visualize $f(x)$
+
+Before integrating anything, get a feel for the function. Plot $f(x)$ over
+$[1, 9]$.
+
+::: {.callout-tip collapse="true"}
+## Hint 1 — Plotting the curve
+
+``` r
+x <- seq(from = 0, to = 10, by = 0.1)
+y <- f(x)
+plot(x, y, type = "l", lwd = 4, col = "steelblue",
+     xlab = "x", ylab = "f(x)", 
+     xlim = c(0,10), ylim = c(0, max(y)),
+     main = "f(x) = 1 + 2 sin(x/2) exp(-x/6)")
+abline(v = c(1,9), lwd = 5, lty = 2)
+```
+:::
+
+**Questions to consider:**
+
+1. Is $f(x)$ positive over the whole interval? What would happen if $f(x)$ was positive and negative in our intregation domain?
+2. Roughly by eye, what do you think the average height of the curve is over
+   $[1,9]$?  \textbf{Pro-tip:} Even if it is just a guess, always keep intuition about \text{what makes sense} before, during and after you compute anything.
+
+# Analytical Integration
+
+Before turning to Monte Carlo, it's worth knowing the *true* value of the
+integral so we have something to check our simulations against.
+
+## The analytical solution
+
+Unlike many integrals in real life, this one is simple enough to do by hand, but the point here is not to do it yourself.  Hence the antiderivative is provided below.
+
+$$
+F(x) = x - \frac{6}{5}e^{-x/6}\sin\!\left(\frac{x}{2}\right) - \frac{18}{5}e^{-x/6}\cos\!\left(\frac{x}{2}\right) + C,
+$$
+
+so that
+
+$$
+I = \int_1^9 f(x)\,dx = F(9) - F(1).
+$$
+
+The R code below implements $F(x)$ directly and confirms it matches it with R's native numerical integration function `integrate()`:
+
+```{r}
+#| label: analytical-solution
+
+F <- function(x) {
+  x - (6/5) * exp(-x/6) * sin(x/2) - (18/5) * exp(-x/6) * cos(x/2)
+}
+
+I_analytical <- F(9) - F(1)
+I_analytical
+
+I_numeric <- integrate(f, lower = 1, upper = 9)$value
+I_numeric
+
+all.equal(I_analytical, I_numeric)
+```
+
+The true value is approximately **`r round(I_analytical, 4)`**. Keep this
+number handy — it's the benchmark for everything that follows.
+
+# Monte Carlo Estimation
+
+Now let's approximate the same integral with sampling.
+
+## Sample and estimate
+
+1. Draw `n = 1000` random values from a $\text{Uniform}(1, 9)$ distribution.
+2. Evaluate $f$ at each sampled value.
+3. Combine these into the Monte Carlo estimate $\hat{I}_n = (b-a)\cdot \overline{f}$.
+4. Compare your estimate to `I_analytical`. How close is it?
+
+::: {.callout-tip collapse="true"}
+## Hint 3 — Sampling and estimating
+
+``` r
+n <- 1000
+a <- 1
+b <- 9
+
+x_sample <- runif(n, min = a, max = b)
+f_sample <- f(x_sample)
+
+I_hat <- (b - a) * mean(f_sample)
+I_hat
+```
+
+Try re-running this chunk a few times. Notice that `I_hat` changes slightly each time — it's a random
+quantity, unlike the analytical value.
+:::
+
+**Question:** If you increase `n` from 1000 to 100,000, what do you expect to
+happen to `I_hat`?
+
+# Quantifying Uncertainty: The CLT and LLN
+
+The LLN tells us $\hat{I}_n$ converges to $I$, but it says nothing about how
+far off we should expect to be for a *finite* $n$. That's where the CLT comes
+in.
+
+Because different draws of $f(x)$ are i.i.d. with some finite variance
+$\sigma^2 = \mathbb{V}(f(x))$, the CLT tells us that for large $n$,
+
+$$
+\overline{f} \; \dot\sim \; N\!\left(\frac{I}{b-a},\; \frac{\sigma^2}{n}\right).
+$$
+
+Multiplying through by $(b-a)$, the Monte Carlo estimate itself is
+approximately normal:
+
+$$
+\hat{I}_n \;\dot\sim\; N\!\left(I,\; (b-a)^2\frac{\sigma^2}{n}\right).
+$$
+
+We estimate $\sigma^2$ with the sample variance of our draws of $f(x)$,
+which gives an approximate **95% confidence interval**:
+
+$$
+\hat{I}_n \pm 1.96 \cdot (b-a) \cdot \frac{s}{\sqrt{n}}, \qquad
+s = \sqrt{\mathbb{V}[f(x)]}.
+$$
+In R we can estimate $s$ with the functions `sd()` or by taking the square root (i.e. `sqrt`) of the sample variance `\var()`.  
+
+\mathbf{Pro-tip:} The z-score can be retrieved dynamically in R by using the function `qnorm(1-(alpha/2))` after defining `alpha` as the crtical level $\alpha$. 
+
+## Draw a sample and build a 95% CI
+
+Using a sample of size `n = 1000`:
+
+1. Compute the point estimate $\hat{I}_n$.
+2. Compute the standard error of the estimate.
+3. Construct a 95% confidence interval.
+4. Does your interval contain the analytical value from Exercise 2?
+
+::: {.callout-tip collapse="true"}
+## Hint 4 — Standard error and CI
+
+``` r
+n <- 1000
+x_sample <- runif(n, 1, 9)
+f_sample <- f(x_sample)
+
+I_hat <- (9 - 1) * mean(f_sample)
+se_hat <- (9 - 1) * sd(f_sample) / sqrt(n)
+
+alpha <- 0.05
+z <- qnorm(1-(alpha/2))
+
+ci_lower <- I_hat - z * se_hat
+ci_upper <- I_hat + z * se_hat
+
+c(estimate = I_hat, lower = ci_lower, upper = ci_upper)
+```
+:::
+
+**Question:** One single confidence interval either contains the true value
+or it doesn't — the true value is fixed and the CI is random. So what does "95% confidence" actually describe? Keep this question in mind for the next section, where you'll check it directly.
+
+# Validating the CLT: Empirical Coverage
+
+If the CLT-based confidence interval is doing its job, then if we repeated
+the sampling process many times and built a new 95% CI each time, about 95%
+of those intervals should contain the true value $I$ — regardless of the
+sample size (though small $n$ can make the \textit{asymptotically} normal approximation shakier).
+
+## Coverage simulation
+
+For each of three sample sizes — say `n = 10`, `n = 50`, and `n = 500` —
+we will repeat the following many times (e.g., `n_reps = 300`):
+
+1. Draw a sample of size $n$ from $\text{Uniform}(1,9)$.
+2. Compute $\hat{I}_n$ and its 95% CI.
+3. Record whether the interval contains the true value `I_analytical`.
+
+Then we will:
+
+- Compute the **empirical coverage rate** for each sample size (the
+  proportion of intervals that contained the truth). It should be close to
+  0.95 for all three, though small-$n$ coverage may wobble a bit more.
+- Make a plot with:
+  - a horizontal line at the true value $I$,
+  - every simulated CI drawn as a thin, light-gray vertical segment,
+  - the segments jittered/spread along the x-axis so they don't all
+    overlap, and
+  - the three sample sizes shown separately (facets or distinct x-ranges
+    both work).
+
+Copy---paste the following simulation code.
+
+::: {.callout-tip collapse="false"}
+## Simulation function
+
+``` r
+one_ci <- function(n, a = 1, b = 9) {
+  x_sample <- runif(n, a, b)
+  f_sample <- f(x_sample)
+  I_hat <- (b - a) * mean(f_sample)
+  se_hat <- (b - a) * sd(f_sample) / sqrt(n)
+  data.frame(
+    lower = I_hat - 1.96 * se_hat,
+    upper = I_hat + 1.96 * se_hat
+  )
+}
+
+n_reps <- 300
+sample_sizes <- c(10, 50, 500)
+
+sims <- lapply(sample_sizes, function(n) {
+  reps <- do.call(rbind, replicate(n_reps, one_ci(n), simplify = FALSE))
+  reps$n <- n
+  reps$rep_id <- 1:n_reps
+  reps$covered <- (reps$lower <= I_analytical) & (I_analytical <= reps$upper)
+  reps
+})
+
+sims_df <- do.call(rbind, sims)
+head(sims_df)
+```
+:::
+
+::: {.callout-tip collapse="false"}
+## Calculate coverage rate (percentage of time CI contains the true value)
+
+``` r
+coverage <- sims_df |>
+  group_by(n) |>
+  summarise(coverage_rate = mean(covered), .groups = "drop")
+
+coverage
+```
+
+Each `coverage_rate` should land close to 0.95. For lower $n$ the asymptotic validity of the CLT may not have "kicked in".  Try switching out `qnorm()` with the score from the t-distribution`qt(1-(alpha/2), df = n-1)`
+:::
+
+::: {.callout-tip collapse="false"}
+## Plotting the intervals
+
+``` r
+ggplot(sims_df, aes(x = rep_id, y = (lower + upper) / 2)) +
+  geom_segment(
+    aes(xend = rep_id, y = lower, yend = upper,
+        color = covered),
+    linewidth = 0.4,
+    alpha = 0.6
+  ) +
+  scale_color_manual(
+    values = c(`TRUE` = "gray70", `FALSE` = "firebrick"),
+    labels = c(`TRUE` = "Covers truth", `FALSE` = "Misses truth"),
+    name = NULL
+  ) +
+  geom_hline(
+    yintercept = I_analytical,
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  facet_wrap(
+    ~ n,
+    scales = "free_x",
+    labeller = label_both
+  ) +
+  labs(
+    x = "Simulation replicate (jittered)",
+    y = "Estimate and 95% CI",
+    title = "Empirical coverage of Monte Carlo confidence intervals",
+    subtitle = "Steelblue line = true integral value"
+  ) +
+  theme_minimal()
+```
+
+You could also color the segments by whether they covered the true value
+(`covered`) to make the small fraction of misses visually obvious.
+:::
+
+**Reflection questions:**
+
+1. Look at your plot. The horizontal blue line — the true value $I$ — never
+   moves. What *is* random from replicate to replicate?
+2. Does the coverage rate get noticeably better as $n$ increases, or is it
+   already close to 95% even at `n = 10`? What does this tell you about how
+   quickly the CLT approximation "kicks in" for this particular $f$?
+3. Suppose someone tells you, "there's a 95% probability that the true
+   integral lies inside my one confidence interval." Using what you just
+   saw in the simulation, explain why that phrasing is misleading, and how
+   you'd rephrase it correctly.
+4. How would you expect the *width* of the CIs (not their coverage) to
+   change as $n$ grows from 10 to 500? Does your plot support that?
+
+# Wrap-Up
+
+- The Monte Carlo estimate $\hat{I}_n = (b-a)\overline{f}$ is consistent
+  by the LLN — it converges to the true integral as $n \to \infty$.
+- The CLT lets us attach a confidence interval to any *finite* sample,
+  because $\hat{I}_n$ is approximately normally distributed around $I$.
+- Confidence intervals themselves are random estimates, not the probability that the true value is in that interval (it is or it isn't because it is fixed).
+
+
+------------------------------------------------------------------------

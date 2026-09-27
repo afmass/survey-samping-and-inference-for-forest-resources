@@ -1,0 +1,842 @@
+---
+title: "Model-assisted estimation"
+subtitle: "Estimating Mean Basal Area in the Doubs"
+author: "Alexander Massey"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+    number-sections: true
+    code-fold: false
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    theme: flatly
+    fontsize: 1.05em
+    embed-resources: true
+execute:
+  echo: true
+  warning: false
+  message: false
+  cache: true
+---
+
+```{r}
+#| label: setup
+#| include: true
+
+library(sf)
+library(terra)
+library(tidyterra)
+library(dplyr)
+library(ggplot2)
+library(tmap)
+library(here)
+
+```
+
+# Introduction
+
+In this exercise you'll work with basal area (BA) data from the Doubs
+department in France. ONF (Office National des Forêts) measured basal area
+on a set of field plots, but **only in public forests**, which make up
+roughly a third of the forest land in Doubs. Separately, IGN produced a
+wall-to-wall kNN prediction of basal area by combining photogrammetric
+canopy height information and the official French National 
+Forest Inventory (NFI), covering the whole department.  Being a survey with
+an independent sample, this provides a perfect opportunity to demonstrate the 
+difference between true external models and internal models in the context of 
+model-assisted estimation which is design-based.
+
+You will build up several estimators of the population mean basal area,
+starting from basic one-phase estimation (no auxiliary information) and 
+gradually bringing in the auxiliary
+prediction surface, and compare their point estimates, variances, and
+confidence intervals. Along the way you'll think carefully about **which of
+these estimators are actually unbiased**, and under what assumptions.
+
+# The Estimators
+
+Let $Y(x)$ be the basal area measured on field plot $x\in s$, for sample $s$,
+and let $Z(x)$ be the value of the auxiliary surface at that
+same plot location. Let $\bar Z := \frac{1}{A_T}\int Z(x)dx$ denote the mean of the 
+auxiliary over the *entire* population (every pixel) in target territory $T$.  This is
+called the **exhaustive mean**.  
+
+## One-phase estimator
+
+If we ignore the prediction surface entirely, we're back to a simple
+design-based estimator:
+
+$$
+\hat{Y}_{1p} = \frac{1}{n}\sum_{x\in s} Y(x), \qquad
+\hat{V}(\hat{Y}_{1p}) = \frac{1}{n(n-1)}\sum_{x\in s}\left(Y(x)-\bar{Y}_{s}\right)
+$$
+
+These are exactly unbiased under the assumed sampling design, but it uses none of the
+auxiliary information we have available.  For systematic sampling, simulation studies 
+have shown that the point estimator can still be considered unbiased, but the variance
+estimator tends to overestimate the true design-based variance.  However, we generally proceed
+as if it is uniform i.i.d. sampling and accept that the confidence interval is overly conservative.
+
+## Synthetic estimator
+
+At the other extreme, for wall-to-wall auxiliary information this is the mean of some model's
+predictions applied to $Z(x)$ for every pixel on a map.  Since there are so many pixels on a map, this can
+be considered be negligly close the notion under the Monte Carlo approach:
+
+$$
+\hat{Y}_{syn} = \frac{1}{A_T}\int \widehat{Y}(x)dx
+$$
+where $A_T$ is the area of the target region.  There is no bias correction, no guarantee
+that it is unbiased at all, but can be applied to any region where we have remote sensing,
+even if it has zero inventory plots containing ground truth.  Sometimes this is the best you 
+can do.
+
+**Question to consider:** if you computed the "variance" of this estimator
+across the millions of pixels in the prediction surface, what would happen
+to it, and why would that number be misleading?
+
+## Difference estimator
+
+The **difference estimator** corrects the synthetic estimate using the
+average residual observed on the field plots:
+
+$$
+\hat{Y}_{diff} = \frac{1}{A_T}\int \widehat{Y}(x)dx + \frac{1}{n}\sum_{x\in s} (R(x)),
+\quad
+\hat{V}(\hat{Y}_{diff}) = \frac{1}{n(n-1)}\sum_{x\in s}\left(R(x)-\bar{R}_{s}\right)
+$$
+where $R(x):=Y(x)-\hat{Y}(x)$.
+
+This estimator treats the prediction surface as fixed, external
+information — it was **not** fit using the field plots in our target area and rather some
+independent training set.
+
+**Question to consider:** assuming uniform, independent sampling, is
+$\hat{V}(\hat{Y}_{diff})$ exactly unbiased, asymptotically unbiased, or
+biased? Does that still hold if the plots were instead laid out on a
+systematic grid?
+
+## Model-assisted (plug-in) estimator
+
+Instead of taking the prediction surface as-is, we can **re-fit** it using
+the field data — for example, a simple linear model:
+
+$$
+Y(x) = \beta_0 + \beta_1 Z(x) + R(x)
+$$
+In this exercise we consider $Z(x):=\hat{Y}(x)$ to be the synthetic kNN prediction from an indepedent
+survey (the official NFI) so it can be **considered as if was another predictor**, like say mean canopy height.  
+Why?
+
+Because ordinary least squares residuals have mean zero by construction for the training set, we
+can plug the exhaustive mean of the predictor directly into the fitted line:
+
+$$
+\hat{Y}_{plugin} = \hat\beta_0 + \hat\beta_1\,{\hat{Y}}_{syn}, \qquad
+\widehat{V}(\hat{Y}_{plugin}) \approx \frac{1}{n(n-1)}\sum_{x\in s}\left(\hat R(x)-\bar{\hat{R}}_{s}\right).
+$$
+where $\hat R(x)$ are the estimated residuals of the linear model fit.  The hat
+indicates that it was estimated from the probability sample.
+A useful heuristic for how much this should help, relative to the one-phase
+estimator, comes from the model's $R^2$:
+
+$$
+\hat{V}(\hat{Y}_{plugin}) \approx (1 - R^2)\, \hat{V}(\hat{Y}_{1p}).
+$$
+
+**Question to consider:** why did we not need to separately compute a mean
+residual correction here, the way we did for the difference estimator? Write
+what the plug-in estimator would look like if we chose a model without the 
+zero mean residual property.
+
+::: {.callout-tip collapse="true"}
+## Hint
+$$
+\begin{array}{c @{\hspace{2cm}} l}
+\begin{aligned}
+Y(x):= \mathbf{Z}(x)^t\boldsymbol{\beta} + R(x)
+\end{aligned}
+& \text{\textcolor{blue}{\textit{"assisting model"} proposal}} \\[10pt]
+\begin{aligned}
+\hat{Y}(x) = \mathbf{Z}(x)^t\boldsymbol{\hat\beta}
+\hspace{1.5cm}
+\hat{R}(x) = Y(x) - \hat{Y}(x)
+\end{aligned}
+& \text{\textcolor{blue}{\textit{Plug-in to }}} \textcolor{blue}{\hat{Y}_{diff}}
+\end{array}
+$$
+:::
+
+## g-weight variance
+
+The variance formula above for $\hat{Y}_{plugin}$ may be considered a bit unrealistic
+— it ignores the fact that $\hat\beta_0$ and $\hat\beta_1$ were themselves
+estimated from the same sample, with their own sampling variability. The
+**g-weight variance** accounts for this properly using a sandwich-type
+covariance estimate of the regression coefficients, propagated through the
+exhaustive auxiliary vector.
+
+$$
+\hat{Y}_{gw}=\bar{\mathbf Z}^\top\mathbf{\hat{\beta}_s},
+\qquad\qquad
+\hat{\mathbb V}[\hat{Y}_{gw}] = 
+  \displaystyle
+  \bar{\mathbf Z}^\top
+  \hat\Sigma_{\hat{\boldsymbol{\beta}}_s}
+  \bar{\mathbf Z}
+$$
+where $\bar{\mathbf Z}$ is the exhaustive auxiliary vector over all pixels and the design-based
+variance-covariance estimate of $\hat\beta$ is
+$$
+\hat\Sigma_{\hat{\boldsymbol{\beta}}_s}
+\approx
+\mathbf{A}_s^{-1}
+\left[
+\frac{1}{n^2}
+\sum_{x \in s}
+\hat{R}(x)^2
+\mathbf{Z}(x)\mathbf{Z}(x)^t
+\right]
+\mathbf{A}_s^{-1}
+$$
+with $\mathbf{A}_s:=\frac{1}{n}\sum_{x \in s}\mathbf{Z}(x)\mathbf{Z}(x)^\top$.
+
+This variance estimator has better statistical properties (i.e. calibration) and its
+derivation is based on a Taylor approximation, which is out of scope for this course.
+
+Regardless, you'll build this one from scratch later in the exercise.
+
+# The Data
+
+You'll work with four spatial layers:
+
+- `doubs_ONF_plots.gpkg` — field plots measured by ONF, with basal area
+  stored in `BA_ONF`, and a logical column `uniform_sample` flagging a
+  systematic subsample of plots.
+- The ONF public forest boundary shapefile — the extent ONF actually
+  inventories (roughly a third of the forest area in Doubs).
+- `doubs_strata.gpkg` — a stratification layer, with region codes stored in
+  `REGIONN`.
+- `kNN_predictive_surface.tif` — the wall-to-wall kNN prediction of basal
+  area produced by IGN from NFI data, stored in band `BA_pred_NFI`.
+
+```{r}
+#| label: load-data
+#| echo: true
+#| output: false
+#| message: false
+
+doubs_ONF_plots <- st_read(here("exercises", "data", "doubs_ONF_plots.gpkg")) |>
+  mutate(BA_ONF = G_onf,
+         surf_maille_fct = as.factor(surf_maille))
+
+doubs_public_forests <- st_read(here("exercises", "data", "doubs_public_forests.gpkg"))
+
+doubs_strata <- st_read(here("exercises", "data", "doubs_strata.gpkg"))
+
+pred_surface <- rast(here("exercises", "data", "kNN_predictive_surface.tif")) |>
+  select(BA_pred_NFI = gtot_1)
+```
+
+## Visualize the layers
+
+Before doing anything quantitative, look at what you're working with. Use
+the **zoom** R package (or repeated `ggplot2` calls) to get a feel for the
+extent and shape of each layer, then overlay the field plots on the
+stratification layer, colored by `REGIONN`.
+
+::: {.callout-tip collapse="true"}
+## Hint 1 — Plots over strata with ggplot()
+
+``` r
+ggplot() +
+  geom_sf(data = doubs_strata, aes(fill = REGIONN), color = NA, alpha = 0.6) +
+  geom_sf(data = doubs_ONF_plots, size = 0.7, shape = 16) +
+  theme_minimal() +
+  labs(title = "ONF Plots over Stratification Regions", fill = "REGIONN")
+```
+:::
+
+::: {.callout-tip collapse="true"}
+## Interactive plot to zoom in using the *tmap* package
+
+``` r
+# Interactive map
+tmap_mode("view")
+
+# comment in/out uniform sample part
+tm_shape(doubs_strata) +
+  tm_polygons(
+    col = "REGIONN",
+    fill_alpha = 0.5,
+    border.col = "grey40"
+  ) +
+  tm_shape(doubs_ONF_plots) +
+  tm_symbols(
+    col = "surf_maille_fct",
+    size = 0.4,
+    fill_alpha = 0.9,
+    border.col = "black"
+  )
+```
+:::
+
+**Questions to consider:**
+
+1. Some `REGIONN` strata clearly have more plots per unit area than others —
+   ONF has *oversampled* them in part for LiDAR calibration. What might other 
+   reasons to oversample? Think about what makes a stratum expensive or important 
+   to monitor more precisely.
+2. `surf_maille` gives the mesh size of the sampling grid, and
+   `uniform_sample` flags a subsample that restores a uniform mesh size
+   across all of Doubs. Re-plot using only `doubs_ONF_plots |> filter(uniform_sample)`, 
+   again over `REGIONN`. How does the pattern change?  
+3. Is the uniform sample still purely systematic?
+
+::: {.callout-tip collapse="true"}
+## Hint 2 — Uniform subsample only
+
+``` r
+ggplot() +
+  geom_sf(data = doubs_strata, aes(fill = REGIONN), color = NA, alpha = 0.6) +
+  geom_sf(data = doubs_ONF_plots |> filter(uniform_sample),
+          size = 0.7, shape = 16) +
+  theme_minimal() +
+  labs(title = "Uniform-Mesh Subsample over Stratification Regions",
+       fill = "REGIONN")
+```
+:::
+
+## Restricting the population to public forest
+
+ONF only inventories **public** forest — about a third of the forest land
+in Doubs. Any population mean we compute needs to be defined over that same
+extent, so intersect the stratification layer with the public forest
+boundary.
+
+```{r}
+#| label: intersect-frame
+
+doubs_strata <- st_transform(doubs_strata, st_crs(doubs_public_forests))
+
+doubs_intersected <- st_intersection(
+  doubs_public_forests,
+  doubs_strata |> select(REGIONN)
+)
+
+# Clean up: keep one polygon per row
+doubs_intersected <- doubs_intersected |>
+  st_collection_extract("POLYGON") |>
+  st_cast("POLYGON")
+
+doubs_intersected$area_ha <- as.numeric(st_area(doubs_intersected)) / 10000
+area_total <- sum(doubs_intersected$area_ha)
+```
+
+**Question to consider:** basal area is normally reported as a per-hectare
+mean, not a total — so why bother computing `area_ha` at all here?
+
+## Building the exhaustive auxiliary vector
+
+To use the difference and model-assisted estimators, we need
+$\bar{\hat{Y}}_U$: the mean of the prediction surface **restricted to public
+forest**, since that's the population ONF actually samples.
+
+```{r}
+#| label: exhaustive-mean
+
+doubs_vect <- vect(doubs_intersected)
+
+if (crs(doubs_vect) != crs(pred_surface)) {
+  doubs_vect <- project(doubs_vect, crs(pred_surface))
+}
+
+# crop shrinks the bounding box; mask sets pixels outside the polygons to NA
+pred_doubs <- crop(pred_surface, doubs_vect, mask = TRUE)
+
+exhaustive_vector <- global(pred_doubs, fun = "mean", na.rm = TRUE) |>
+  t() |>
+  as.data.frame()
+```
+
+Now join the plots to the public forest polygons so you can plot only the
+plots that actually fall inside the extent you're estimating over.
+
+```{r}
+#| label: join-plots
+
+doubs_plots_on_layers <- st_join(
+  doubs_ONF_plots,
+  doubs_public_forests,
+  join = st_within,
+  left = TRUE
+)
+```
+
+## Map the prediction surface with sample plots
+
+Overlay the uniform-mesh subsample of plots on the cropped prediction
+surface.
+
+::: {.callout-tip collapse="true"}
+## Hint 3 — Plotting the raster with plots
+
+``` r
+ggplot() +
+  geom_spatraster(data = pred_doubs$BA_pred_NFI) +
+  geom_sf(data = doubs_plots_on_layers |> filter(uniform_sample),
+          color = "red", size = 1, shape = 16) +
+  scale_fill_viridis_c(na.value = "transparent", name = "Prediction") +
+  theme_minimal() +
+  labs(title = "kNN Predictive Surface with ONF Plots")
+```
+:::
+
+**Question to consider:** by eye, does the prediction surface look like it
+varies smoothly, or are there sharp edges? What would sharp edges suggest
+about how the kNN model was built?
+
+# Estimation
+
+For all of the estimators below, use the uniform-mesh subsample so that
+each plot represents roughly the same area.
+
+```{r}
+#| label: prep-sample
+
+sample_plots <- doubs_plots_on_layers |> filter(uniform_sample)
+n <- nrow(sample_plots)
+
+alpha <- 0.05
+z_score <- qnorm(c(alpha/2, 1-alpha/2))
+```
+
+## One-phase estimate
+
+Compute $\hat{Y}_{1p}$, its variance, and a 95% confidence interval based on
+the CLT.
+
+::: {.callout-tip collapse="true"}
+## Hint 4 — One-phase
+
+``` r
+Y_1p  <- mean(sample_plots$BA_ONF)
+VY_1p <- var(sample_plots$BA_ONF) / n
+CI_Y_1p <- Y_1p + z_score * sqrt(VY_1p)
+```
+:::
+
+## Synthetic estimate
+
+Compute the synthetic estimate two ways: first as the mean of predictions
+*at the plot locations*, then compare it conceptually to the exhaustive
+mean `exhaustive_vector$BA_pred_NFI`.
+
+**NOTE:** In this data, we were not provided the training data from the official
+NFI used to produce the kNN predictions so we can't properly propagate 
+the randomness to produce a confidence interval.  Typically for kNN this is done
+using a bootstrap applied to all the wall-to-wall pixels. Be aware that the CIs 
+for the synthetic estimator are often narrower than the model-assisted ones, which
+leads to getting *greedy* and desiring to trust it more.
+
+::: {.callout-tip collapse="true"}
+## Hint 5 — Synthetic estimator
+
+``` r
+Y_syn  <- exhaustive_vector$BA_pred_NFI
+VY_syn <- NA
+CI_Y_syn <- Y_syn + z_score * sqrt(VY_syn)
+```
+:::
+
+**Question to consider:** is the synthetic estimator exactly unbiased,
+approximately unbiased, or biased? What would have to be true about the
+model for it to be unbiased?
+
+## Difference estimate
+
+Compute $\hat{Y}_{diff}$ and its confidence interval.
+
+::: {.callout-tip collapse="true"}
+## Hint 6 — Difference estimator
+
+``` r
+Y_diff  <- exhaustive_vector$BA_pred_NFI +
+  mean(sample_plots$BA_ONF - sample_plots$BA_pred_NFI)
+VY_diff <- var(sample_plots$BA_ONF - sample_plots$BA_pred_NFI) / n
+CI_Y_diff <- Y_diff + z_score * sqrt(VY_diff)
+```
+:::
+
+**Question to consider:** how does `CI_Y_diff` compare in width to
+`CI_Y_1p`? Under what condition on the prediction surface would you expect
+the difference estimator to help a lot, versus barely at all?
+
+## Model-assisted (plug-in) estimate
+
+Fit a simple linear model of `BA_ONF` on `BA_pred_NFI` using the sample,
+verify the zero-mean-residual property, and use it to compute
+$\hat{Y}_{plugin}$.
+
+::: {.callout-tip collapse="true"}
+## Hint 7 — Plug-in estimator
+
+``` r
+mod <- lm(BA_ONF ~ BA_pred_NFI, data = sample_plots)
+mean(resid(mod))                 # should be ~0
+
+R2 <- summary(mod)$r.squared
+(1 - R2) * VY_1p                 # heuristic expected variance
+
+Y_plugin  <- as.numeric(coefficients(mod)[1] +
+  exhaustive_vector$BA_pred_NFI * coefficients(mod)[2])
+VY_plugin <- var(mod$residuals) / n
+CI_Y_plugin <- Y_plugin + z_score * sqrt(VY_plugin)
+```
+:::
+
+**Question to consider:** `VY_plugin` here treats $\hat\beta_0$ and
+$\hat\beta_1$ as if they were known constants rather than estimated
+quantities. Does that make it exactly unbiased, asymptotically unbiased, or
+biased, under uniform iid sampling?
+
+## g-weight variance
+
+Now account properly for the sampling variability of the regression
+coefficients themselves, using a sandwich-type design-based covariance
+estimator.
+
+::: {.callout-tip collapse="true"}
+## Hint 8 — g-weight variance
+
+``` r
+# Make a function
+design_cov_matrix_beta <- function(mod, data){
+
+  mf  <- model.frame(mod, data = sample_plots)
+  y   <- model.response(mf)
+  X   <- model.matrix(mod, data = sample_plots)
+  res <- resid(mod)
+
+  n_total <- nrow(X)
+  As2inv    <- solve((t(X) %*% X) / n_total)
+  theta_hat <- drop((y %*% X / n_total) %*% As2inv)
+
+  middle_term <- (t(X) %*% ((res^2) * X)) / (n_total^2)
+  cov_theta   <- As2inv %*% middle_term %*% As2inv
+  
+  return(cov_theta)
+}
+
+cov_B <- design_cov_matrix_beta(mod, data)
+aux_vec <- c(1, exhaustive_vector$BA_pred_NFI)
+aux_vec %*% coef(mod)
+g_var   <- drop(t(aux_vec) %*% cov_B %*% aux_vec)
+CI_Y_gw <- Y_plugin + z_score * sqrt(g_var)
+```
+:::
+
+**Question to consider:** how does `g_var` compare to `VY_plugin`? Which
+direction would you expect the naive `VY_plugin` to be biased in, and why?
+
+## Alternative sythetic estimator with confidence intervals
+
+We can borrow the design-based covariance estimate from the g-weight to 
+fit a linear model **without** an intercept, in order to test a synthetic estimator
+that has no guarantee to be unbiased via the zero mean residual property.
+
+``` r
+
+mod_no_intercept <- lm(BA_ONF ~ -1 + BA_pred_NFI, data = sample_plots)
+mean(resid(mod_no_intercept))                 # should not be 0
+
+cov_B_no_intercept <- design_cov_matrix_beta(mod_no_intercept)
+aux_vec_no_intercept <- c(exhaustive_vector$BA_pred_NFI)
+Y_syn2 <- aux_vec_no_intercept %*% coef(mod_no_intercept)
+VY_syn2   <- drop(t(aux_vec_no_intercept) %*% cov_B_no_intercept %*% aux_vec_no_intercept)
+CI_Y_syn2 <- Y_syn2 + z_score * sqrt(VY_syn2)
+
+```
+
+## Compare everything
+
+Put the point estimates, variances, and confidence intervals for all four
+estimators side by side.
+
+```{r}
+#| label: compare
+#| eval: false
+
+library(tidyverse)
+
+estimates <- tibble(
+  estimator = c(
+    "One-phase", "Synthetic", "Synthetic2", "Difference",
+    "Internal (Plug-in)", "Internal (g-weight)"
+  ),
+  estimate = c(Y_1p, Y_syn, Y_syn2, Y_diff, Y_plugin, Y_plugin),
+  variance = c(VY_1p, VY_syn, VY_syn2, VY_diff, VY_plugin, g_var),
+  lower = c(
+    CI_Y_1p[1], CI_Y_syn[1], CI_Y_syn2[1],
+    CI_Y_diff[1], CI_Y_plugin[1], CI_Y_gw[1]
+  ),
+  upper = c(
+    CI_Y_1p[2], CI_Y_syn[2], CI_Y_syn2[2],
+    CI_Y_diff[2], CI_Y_plugin[2], CI_Y_gw[2]
+  )
+) %>%
+  mutate(
+    CI_width = upper - lower,
+    type = if_else(
+      estimator %in% c("Synthetic", "Synthetic2"),
+      "Potentially biased",
+      "Unbiased (at least asymptotically)"
+    ),
+    estimator = factor(estimator, levels = estimator)
+  )
+
+estimates
+
+
+plot_estimates <- function(estimates, y_max = 24) {
+  
+  # Define Y-axis limits with margin
+  y_min <- min(estimates$lower, na.rm = TRUE)
+  margin <- 0.05 * (y_max - y_min)
+  
+  # Generate plot
+  ggplot(estimates, aes(x = estimator, y = estimate, colour = type)) +
+    geom_linerange(
+      aes(ymin = lower, ymax = upper),
+      linewidth = 1.2
+    ) +
+    geom_point(size = 3) +
+    scale_colour_manual(
+      values = c(
+        "Potentially biased" = "red",
+        "Unbiased (at least asymptotically)" = "blue"
+      )
+    ) +
+    coord_cartesian(
+      ylim = c(y_min - margin, y_max + margin)
+    ) +
+    labs(
+      x = NULL,
+      y = "Estimate",
+      colour = NULL
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 30, hjust = 1),
+      legend.position = "top"
+    )
+}
+
+plot_estimates(estimates)
+
+```
+
+**Questions to consider:**
+
+1. Which estimator has the smallest variance? Is that a reason to trust it
+   the most?
+2. Why does it not make sense to combine these intervals by simply taking their overlapping region?
+3. Try refitting the synthetic2 model using only data plots in REGIONN == "AVANT-MONTS JURASSIENS" and generate the results again.
+What happened to the bias now?  This is traditionally why "design-based" is considered the *gold standard* in inference for official statistics.
+
+::: {.callout-tip collapse="true"}
+## Hint: refit the model with this before re-running the previous estimate
+```{r}
+mod_no_intercept <- lm(BA_ONF ~ BA_pred_NFI, data = sample_plots |> filter(REGIONN == "AVANT-MONTS JURASSIENS"))
+
+# Note that the zero mean property only applies to the residuals in the training set.  
+# It is lost here because we apply the model only in AVANT-MONTS JURASSIENS 
+# and apply it to all other regions.  We can do this manually...
+
+resids_manual <- sample_plots$BA_ONF - predict(mod_no_intercept, newdata = sample_plots)
+mean(resids_manual)
+```
+:::
+
+# Model-assisted versus stratification
+
+Recall that our dataset had different sampling intensities in some regions as indicated by the 
+factor variable `surf_maille_fct`.  Let's see how effective this oversampling strategy was estimating
+basal area in Doubs.
+
+When you decide *before* selecting your sample that you will apply an **independent sampling design
+in different domains** we can apply stratification.  This is in contrast with post-stratification
+where we first select the sample according to a predetermined sampling design and apply an ANOVA
+model — i.e. a linear model with categorical/indicator variables by strata  For uniform i.d.d. sampling
+these methods can be shown to be asymptotoically equivalent.  We will compare them here.
+
+The (pre-) stratification estimator is a weighted mean:
+
+$$
+\hat Y_{strat}
+=
+\sum_{h=1}^H p_h\,\bar Y_{s,h}
+\qquad
+\text{where}
+\qquad
+p_h=\frac{A_h}{A_T}
+$$
+where $A_h$ is the area of stratum $h$ and $\bar Y_{s,h}$ is the sample mean in $h$.
+
+By definition that sampling between strata is independent, so we can easily sum the variances:
+$$
+\widehat{\mathbb{V}}[\hat Y_{strat}]=\sum_{h=1}^H p^2_h\cdot\widehat{\mathbb{V}}[\bar Y_{s,h}]=\sum_{h=1}^H p^2_h\cdot\left[\frac{1}{n_h(n_h-1)}\sum_{x\in s_h}(Y(x)-\bar Y_{s,h})^2\right]
+$$
+**Questions:** 
+
+1. Why is $p_h$ get squared in the variance estimator?
+2. In the lecture the point estimator for post-stratification was exactly the same
+   but the variance estimator looked different.  Why can't we use the same variance estimator
+
+::: {.callout-tip collapse="true"}
+## Answer
+The sampling designs are fundamentally different.  In stratification, the sample size in 
+each stratum, $n_h$, is fixed, but in post-stratification it is random.  Furthermore, in the latter
+the sample size in one stratum is correlated with the others -- more sample in one stratum means less in another
+since $n$ is fixed.
+:::
+
+Try to implement the stratified estimator on the full dataset of field data in `doubs_ONF_plots`.  Hints are given
+but try to do each step on your own before peeking:
+
+**Step 1:**
+
+Calculate $p_h$ using `doubs_intersection`.  It may be helpful to make a data.frame of `REGIONN` by `surf_maille_fct`
+as follows:
+
+```{r}
+sampling_intensities <- doubs_ONF_plots |>
+            select(REGIONN, surf_maille_fct) |>
+            st_drop_geometry() |>
+            distinct()
+```
+
+::: {.callout-tip collapse="true"}
+## Hint: `merge(doubs_intersected, sampling_intensities)` and then `group_by(surf_maille_fct)` to sum `area_ha`.
+```{r}
+# Get total areas by sampling intensity variable "surf_maille_fct"
+# and make into proportion
+stratification_props <- doubs_intersected |> 
+  merge(sampling_intensities) |>
+  group_by(surf_maille_fct) |>
+  mutate(strat_area = sum(area_ha)) |>
+  st_drop_geometry() |>
+  select(surf_maille_fct, strat_area) |>
+  distinct() |>
+  ungroup() |>
+  mutate(strat_prop = strat_area/sum(strat_area))
+  
+stratification_props
+```
+:::
+
+**Step 2:**
+
+Merge $p_h$ to `doubs_ONF_plots`.
+
+::: {.callout-tip collapse="true"}
+# Hint
+```{r}
+# Merge to plot data
+doubs_ONF_plots <- doubs_ONF_plots |> 
+  merge(stratification_props, by = "surf_maille_fct", all.x = TRUE)
+```
+:::
+
+**Step 3:**
+
+Merge $p_h$ to `doubs_ONF_plots`.
+
+::: {.callout-tip collapse="true"}
+# Hint:   `st_drop_geometry()` and use `group_by(surf_maille_fct)` to calculate within strata means/variances.
+```{r}
+# Make (pre-) stratified estimate
+strat_ests <- doubs_ONF_plots |> 
+  st_drop_geometry() |>
+  # filter(uniform_sample) |>
+  group_by(surf_maille_fct) |>
+  summarise(n_strat = n(),
+            strat_prop = unique(strat_prop),
+            Y_1p_h = mean(BA_ONF),
+            VY_1p_h = (1/n_strat)*var(BA_ONF)
+            )
+```
+:::
+
+::: {.callout-tip collapse="true"}
+# Hint: `ungroup()` and `summarise(...)` to sum the columns of strata means/variances
+```{r}
+# Make (pre-) stratified estimate
+strat_ests <- doubs_ONF_plots |> 
+  # filter(uniform_sample) |>
+  st_drop_geometry() |>
+  group_by(surf_maille_fct) |>
+  summarise(n_strat = n(),
+            strat_prop = unique(strat_prop),
+            Y_1p_h = mean(BA_ONF),
+            VY_1p_h = (1/n_strat)*var(BA_ONF)
+            ) |>
+  ungroup() |>
+  summarise(Y_strat = sum(strat_prop*Y_1p_h),
+            VY_strat = sum((strat_prop^2)*VY_1p_h)
+            ) |>
+  ungroup()
+```
+:::
+
+**Step 4:**
+
+Calculate the confidence intervals the same as before and add it to our `estimates` tibble.
+
+::: {.callout-tip collapse="true"}
+# Point estimate and variance with confidence interval
+```{r}
+CI_strat <- strat_ests$Y_strat + z_score*sqrt(strat_ests$VY_strat)
+```
+:::
+
+
+::: {.callout-tip collapse="true"}
+# Append to `estimates` tibble
+```{r}
+#| eval: false
+estimates_appended <- estimates |>
+  add_row(
+    estimator = "Stratification (oversampled)",
+    estimate = strat_ests$Y_strat,
+    variance = strat_ests$VY_strat,
+    lower = CI_strat[1],
+    upper = CI_strat[2],
+    CI_width = CI_strat[2]-CI_strat[1],
+    type = "Unbiased (at least asymptotically)"
+  )
+  
+estimates_appended
+  
+plot_estimates(estimates_appended)
+```
+:::
+
+At the cost of 40% more sample plots, it kind of stinks as a stratification...  Why?
+
+
+::: {.callout-tip collapse="true"}
+# Hint:  Post-stratification is model-assisted estimation with an ANOVA...
+```{r}
+#| eval: false
+# The associated model only explains 9% of the variance.
+summary(lm(BA_ONF ~ surf_maille_fct, data = doubs_ONF_plots, weights = surf_maille))$r.squared
+```
+:::
+
+
