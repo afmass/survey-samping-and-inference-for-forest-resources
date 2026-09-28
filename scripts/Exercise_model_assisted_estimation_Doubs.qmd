@@ -28,12 +28,24 @@ execute:
 #| label: setup
 #| include: true
 
+packages <- c("sf", "terra", "tidyterra", "dplyr", "ggplot2", "tmap", "here", "tidyverse", "leaflet", "shiny")
+
+installed <- rownames(installed.packages())
+to_install <- setdiff(packages, installed)
+
+if (length(to_install) > 0) {
+  install.packages(to_install)
+}
+
 library(sf)
 library(terra)
 library(tidyterra)
 library(dplyr)
 library(ggplot2)
 library(tmap)
+library(tidyverse)
+library(leaflet)
+library(shiny)
 library(here)
 
 ```
@@ -62,7 +74,7 @@ these estimators are actually unbiased**, and under what assumptions.
 
 Let $Y(x)$ be the basal area measured on field plot $x\in s$, for sample $s$,
 and let $Z(x)$ be the value of the auxiliary surface at that
-same plot location. Let $\bar Z := \frac{1}{A_T}\int Z(x)dx$ denote the mean of the 
+same plot location. Let $\bar Z := \frac{1}{A_T}\int_T Z(x)dx$ denote the mean of the 
 auxiliary over the *entire* population (every pixel) in target territory $T$.  This is
 called the **exhaustive mean**.  
 
@@ -96,7 +108,7 @@ that it is unbiased at all, but can be applied to any region where we have remot
 even if it has zero inventory plots containing ground truth.  Sometimes this is the best you 
 can do.
 
-**Question to consider:** if you computed the "variance" of this estimator
+**Question to consider:** If you computed the "variance" of this estimator
 across the millions of pixels in the prediction surface, what would happen
 to it, and why would that number be misleading?
 
@@ -116,7 +128,7 @@ This estimator treats the prediction surface as fixed, external
 information — it was **not** fit using the field plots in our target area and rather some
 independent training set.
 
-**Question to consider:** assuming uniform, independent sampling, is
+**Question to consider:** Assuming uniform, independent sampling, is
 $\hat{V}(\hat{Y}_{diff})$ exactly unbiased, asymptotically unbiased, or
 biased? Does that still hold if the plots were instead laid out on a
 systematic grid?
@@ -129,15 +141,14 @@ the field data — for example, a simple linear model:
 $$
 Y(x) = \beta_0 + \beta_1 Z(x) + R(x)
 $$
-In this exercise we consider $Z(x):=\hat{Y}(x)$ to be the synthetic kNN prediction from an indepedent
+In this exercise we consider $Z(x)$ to be the synthetic kNN prediction from an indepedent
 survey (the official NFI) so it can be **considered as if was another predictor**, like say mean canopy height.  
-Why?
 
 Because ordinary least squares residuals have mean zero by construction for the training set, we
 can plug the exhaustive mean of the predictor directly into the fitted line:
 
 $$
-\hat{Y}_{plugin} = \hat\beta_0 + \hat\beta_1\,{\hat{Y}}_{syn}, \qquad
+\hat{Y}_{plugin} = \frac{1}{A_T}\int\left(\hat\beta_0 + \hat\beta_1\,{Z(x)}\right)dx, \quad
 \widehat{V}(\hat{Y}_{plugin}) \approx \frac{1}{n(n-1)}\sum_{x\in s}\left(\hat R(x)-\bar{\hat{R}}_{s}\right).
 $$
 where $\hat R(x)$ are the estimated residuals of the linear model fit.  The hat
@@ -149,7 +160,7 @@ $$
 \hat{V}(\hat{Y}_{plugin}) \approx (1 - R^2)\, \hat{V}(\hat{Y}_{1p}).
 $$
 
-**Question to consider:** why did we not need to separately compute a mean
+**Question to consider:** Why did we not need to separately compute a mean
 residual correction here, the way we did for the difference estimator? Write
 what the plug-in estimator would look like if we chose a model without the 
 zero mean residual property.
@@ -163,12 +174,15 @@ Y(x):= \mathbf{Z}(x)^t\boldsymbol{\beta} + R(x)
 \end{aligned}
 & \text{\textcolor{blue}{\textit{"assisting model"} proposal}} \\[10pt]
 \begin{aligned}
-\hat{Y}(x) = \mathbf{Z}(x)^t\boldsymbol{\hat\beta}
+\hat{Y}(x) = \mathbf{Z}(x)^t\boldsymbol{\hat\beta}_s
 \hspace{1.5cm}
 \hat{R}(x) = Y(x) - \hat{Y}(x)
 \end{aligned}
 & \text{\textcolor{blue}{\textit{Plug-in to }}} \textcolor{blue}{\hat{Y}_{diff}}
 \end{array}
+$$
+$$
+\widehat{Y}_{plugin}=\frac{1}{A_T}\int \hat Y(x)dx + \frac{1}{n}\sum_{x\in s}\hat R(x)
 $$
 :::
 
@@ -182,7 +196,7 @@ covariance estimate of the regression coefficients, propagated through the
 exhaustive auxiliary vector.
 
 $$
-\hat{Y}_{gw}=\bar{\mathbf Z}^\top\mathbf{\hat{\beta}_s},
+\hat{Y}_{gw}=\bar{\mathbf Z}^\top\mathbf{\hat{\boldsymbol{\beta}}_s},
 \qquad\qquad
 \hat{\mathbb V}[\hat{Y}_{gw}] = 
   \displaystyle
@@ -191,7 +205,7 @@ $$
   \bar{\mathbf Z}
 $$
 where $\bar{\mathbf Z}$ is the exhaustive auxiliary vector over all pixels and the design-based
-variance-covariance estimate of $\hat\beta$ is
+variance-covariance estimate of $\hat{\boldsymbol{\beta}}_s$ is
 $$
 \hat\Sigma_{\hat{\boldsymbol{\beta}}_s}
 \approx
@@ -222,8 +236,8 @@ You'll work with four spatial layers:
   inventories (roughly a third of the forest area in Doubs).
 - `doubs_strata.gpkg` — a stratification layer, with region codes stored in
   `REGIONN`.
-- `kNN_predictive_surface.tif` — the wall-to-wall kNN prediction of basal
-  area produced by IGN from NFI data, stored in band `BA_pred_NFI`.
+- `kNN_predictive_surface_doubs.tif` — the wall-to-wall kNN prediction of basal
+  area from NFI data, stored in band `BA_pred_NFI`.
 
 ```{r}
 #| label: load-data
@@ -239,8 +253,7 @@ doubs_public_forests <- st_read(here("exercises", "data", "doubs_public_forests.
 
 doubs_strata <- st_read(here("exercises", "data", "doubs_strata.gpkg"))
 
-pred_surface <- rast(here("exercises", "data", "kNN_predictive_surface.tif")) |>
-  select(BA_pred_NFI = gtot_1)
+pred_surface <- rast(here("exercises", "data", "kNN_predictive_surface_doubs.tif"))
 ```
 
 ## Visualize the layers
@@ -338,16 +351,20 @@ doubs_intersected$area_ha <- as.numeric(st_area(doubs_intersected)) / 10000
 area_total <- sum(doubs_intersected$area_ha)
 ```
 
-**Question to consider:** basal area is normally reported as a per-hectare
-mean, not a total — so why bother computing `area_ha` at all here?
+**Question to consider:** Basal area is normally reported as a per-hectare
+mean, not a total.  Why would we want to compute `area_ha` at all?  Give an 
+example of situation where the total of a parameter of interest would be desirable 
+to report.
 
 ## Building the exhaustive auxiliary vector
 
-To use the difference and model-assisted estimators, we need
-$\bar{\hat{Y}}_U$: the mean of the prediction surface **restricted to public
-forest**, since that's the population ONF actually samples.
+To apply the difference and model-assisted estimators, we need
+$\bar{\mathbf{Z}} =\frac{1}{A_T}\int \mathbf{Z}(x)dx$: the mean of the prediction surface **restricted to public forest**, since that's the population ONF actually samples.  I have already done this for you to reduce the file size of `kNN_predictive_surface_doubs.tif` in the git repo but this is the code I used if you are interested...
 
+::: {.callout-tip collapse="true"}
+# This is how to crop the raster if you need to...
 ```{r}
+#| eval: false
 #| label: exhaustive-mean
 
 doubs_vect <- vect(doubs_intersected)
@@ -356,12 +373,14 @@ if (crs(doubs_vect) != crs(pred_surface)) {
   doubs_vect <- project(doubs_vect, crs(pred_surface))
 }
 
-# crop shrinks the bounding box; mask sets pixels outside the polygons to NA
-pred_doubs <- crop(pred_surface, doubs_vect, mask = TRUE)
+crop(pred_surface, doubs_vect, mask = TRUE)
+```
+:::
 
-exhaustive_vector <- global(pred_doubs, fun = "mean", na.rm = TRUE) |>
-  t() |>
-  as.data.frame()
+Calculate the exhaustive vector
+```{r}
+# Calculate the exhaustive vector
+exhaustive_vector <- global(pred_surface, fun = "mean", na.rm = TRUE)
 ```
 
 Now join the plots to the public forest polygons so you can plot only the
@@ -388,7 +407,7 @@ surface.
 
 ``` r
 ggplot() +
-  geom_spatraster(data = pred_doubs$BA_pred_NFI) +
+  geom_spatraster(data = pred_surface$BA_pred_NFI) +
   geom_sf(data = doubs_plots_on_layers |> filter(uniform_sample),
           color = "red", size = 1, shape = 16) +
   scale_fill_viridis_c(na.value = "transparent", name = "Prediction") +
@@ -397,9 +416,7 @@ ggplot() +
 ```
 :::
 
-**Question to consider:** by eye, does the prediction surface look like it
-varies smoothly, or are there sharp edges? What would sharp edges suggest
-about how the kNN model was built?
+**Question to consider:** Many maps express forests as large continuous areas.  Is this forest layer like this or more fractal-like. 
 
 # Estimation
 
@@ -435,7 +452,7 @@ CI_Y_1p <- Y_1p + z_score * sqrt(VY_1p)
 
 Compute the synthetic estimate two ways: first as the mean of predictions
 *at the plot locations*, then compare it conceptually to the exhaustive
-mean `exhaustive_vector$BA_pred_NFI`.
+mean `exhaustive_vector`.
 
 **NOTE:** In this data, we were not provided the training data from the official
 NFI used to produce the kNN predictions so we can't properly propagate 
@@ -448,13 +465,13 @@ leads to getting *greedy* and desiring to trust it more.
 ## Hint 5 — Synthetic estimator
 
 ``` r
-Y_syn  <- exhaustive_vector$BA_pred_NFI
+Y_syn  <- as.numeric(exhaustive_vector)
 VY_syn <- NA
 CI_Y_syn <- Y_syn + z_score * sqrt(VY_syn)
 ```
 :::
 
-**Question to consider:** is the synthetic estimator exactly unbiased,
+**Question to consider:** Is the synthetic estimator exactly unbiased,
 approximately unbiased, or biased? What would have to be true about the
 model for it to be unbiased?
 
@@ -466,14 +483,14 @@ Compute $\hat{Y}_{diff}$ and its confidence interval.
 ## Hint 6 — Difference estimator
 
 ``` r
-Y_diff  <- exhaustive_vector$BA_pred_NFI +
+Y_diff  <- as.numeric(exhaustive_vector) +
   mean(sample_plots$BA_ONF - sample_plots$BA_pred_NFI)
 VY_diff <- var(sample_plots$BA_ONF - sample_plots$BA_pred_NFI) / n
 CI_Y_diff <- Y_diff + z_score * sqrt(VY_diff)
 ```
 :::
 
-**Question to consider:** how does `CI_Y_diff` compare in width to
+**Question to consider:** How does `CI_Y_diff` compare in width to
 `CI_Y_1p`? Under what condition on the prediction surface would you expect
 the difference estimator to help a lot, versus barely at all?
 
@@ -494,7 +511,7 @@ R2 <- summary(mod)$r.squared
 (1 - R2) * VY_1p                 # heuristic expected variance
 
 Y_plugin  <- as.numeric(coefficients(mod)[1] +
-  exhaustive_vector$BA_pred_NFI * coefficients(mod)[2])
+  exhaustive_vector * coefficients(mod)[2])
 VY_plugin <- var(mod$residuals) / n
 CI_Y_plugin <- Y_plugin + z_score * sqrt(VY_plugin)
 ```
@@ -534,15 +551,23 @@ design_cov_matrix_beta <- function(mod, data){
 }
 
 cov_B <- design_cov_matrix_beta(mod, data)
-aux_vec <- c(1, exhaustive_vector$BA_pred_NFI)
-aux_vec %*% coef(mod)
+aux_vec <- c(1, as.numeric(exhaustive_vector))
+Y_gw <- as.numeric(aux_vec %*% coef(mod))
 g_var   <- drop(t(aux_vec) %*% cov_B %*% aux_vec)
 CI_Y_gw <- Y_plugin + z_score * sqrt(g_var)
 ```
 :::
 
-**Question to consider:** how does `g_var` compare to `VY_plugin`? Which
-direction would you expect the naive `VY_plugin` to be biased in, and why?
+**Question to consider:** How does `g_var` compare to `VY_plugin`? Why are they so similar?
+
+::: {.callout-tip collapse="true"}
+# Hint
+
+The sample size is large, the point estimators are equivalent and both variance estimators
+are design-consistent.
+
+:::
+
 
 ## Alternative sythetic estimator with confidence intervals
 
@@ -556,8 +581,8 @@ mod_no_intercept <- lm(BA_ONF ~ -1 + BA_pred_NFI, data = sample_plots)
 mean(resid(mod_no_intercept))                 # should not be 0
 
 cov_B_no_intercept <- design_cov_matrix_beta(mod_no_intercept)
-aux_vec_no_intercept <- c(exhaustive_vector$BA_pred_NFI)
-Y_syn2 <- aux_vec_no_intercept %*% coef(mod_no_intercept)
+aux_vec_no_intercept <- c(as.numeric(exhaustive_vector))
+Y_syn2 <- as.numeric(aux_vec_no_intercept %*% coef(mod_no_intercept))
 VY_syn2   <- drop(t(aux_vec_no_intercept) %*% cov_B_no_intercept %*% aux_vec_no_intercept)
 CI_Y_syn2 <- Y_syn2 + z_score * sqrt(VY_syn2)
 
@@ -579,7 +604,7 @@ estimates <- tibble(
     "One-phase", "Synthetic", "Synthetic2", "Difference",
     "Internal (Plug-in)", "Internal (g-weight)"
   ),
-  estimate = c(Y_1p, Y_syn, Y_syn2, Y_diff, Y_plugin, Y_plugin),
+  estimate = c(Y_1p, Y_syn, Y_syn2, Y_diff, Y_gw, Y_plugin),
   variance = c(VY_1p, VY_syn, VY_syn2, VY_diff, VY_plugin, g_var),
   lower = c(
     CI_Y_1p[1], CI_Y_syn[1], CI_Y_syn2[1],
@@ -652,14 +677,22 @@ What happened to the bias now?  This is traditionally why "design-based" is cons
 ::: {.callout-tip collapse="true"}
 ## Hint: refit the model with this before re-running the previous estimate
 ```{r}
-mod_no_intercept <- lm(BA_ONF ~ BA_pred_NFI, data = sample_plots |> filter(REGIONN == "AVANT-MONTS JURASSIENS"))
+#| eval: false
+
+mod_fit_locally <- lm(BA_ONF ~ BA_pred_NFI, data = sample_plots |> filter(REGIONN == "AVANT-MONTS JURASSIENS"))
 
 # Note that the zero mean property only applies to the residuals in the training set.  
 # It is lost here because we apply the model only in AVANT-MONTS JURASSIENS 
 # and apply it to all other regions.  We can do this manually...
 
-resids_manual <- sample_plots$BA_ONF - predict(mod_no_intercept, newdata = sample_plots)
+resids_manual <- sample_plots$BA_ONF - predict(mod_fit_locally, newdata = sample_plots)
 mean(resids_manual)
+
+cov_B_fit_locally <- design_cov_matrix_beta(mod_fit_locally)
+aux_vec_fit_locally <- c(1, as.numeric(exhaustive_vector))
+Y_syn2 <- as.numeric(aux_vec_fit_locally %*% coef(mod_no_intercept))
+VY_syn2   <- drop(t(aux_vec_fit_locally) %*% cov_B_fit_locally %*% aux_vec_fit_locally)
+CI_Y_syn2 <- Y_syn2 + z_score * sqrt(VY_syn2)
 ```
 :::
 
@@ -839,4 +872,137 @@ summary(lm(BA_ONF ~ surf_maille_fct, data = doubs_ONF_plots, weights = surf_mail
 ```
 :::
 
+# Model-assisted Small Area Estimation (SAE)
 
+The main idea behind model-assisted small area estimation is to fit the model using the full sample to obtain the regression coefficient vector $\hat{\boldsymbol{\beta}}_s$ and its design-based variance-covariance matrix $\hat\Sigma_{\hat{\boldsymbol{\beta}}_s}$, and then use the fitted model to predict at sample locations within the small area $G$. The small area estimate can then be variance-estimated either using the plug-in estimator under the external model assumption or using the $g$-weight estimator. Two approaches are possible: 
+
+1) de-bias the small area estimate using the mean residual in $G$, or 
+2) include an indicator for $G$ in the model so that the mean residual in $G$ is zero by construction, and then use the $g$-weight variance estimator.
+
+The general form of the first approach can be expressed as:
+
+$$
+\hat{Y}_{sae}=\bar{\mathbf Z}_G^\top\mathbf{\hat{\boldsymbol{\beta}}_s}+\frac{1}{n_G}\sum_{x\in {s_G}}\hat R(x),
+\qquad\qquad
+\hat{\mathbb V}[\hat{Y}_{sae}] = 
+  \displaystyle
+  \bar{\mathbf Z}_G^\top
+  \hat\Sigma_{\hat{\boldsymbol{\beta}}_s}
+  \bar{\mathbf Z}_G + \frac{1}{n_G}\widehat{\mathbb{V}}_{s_G}\left[\hat R(x)\right]
+$$
+
+The second approach is the same except that the second terms are removed because the mean residual term is zero in $G$ by construction.  Note that we could also do a plug-in approach under the external model assumption and the variance estimator would reduce to:
+
+$$
+\hat{\mathbb V}[\hat{Y}_{sae,external}]=\frac{1}{n_G}\widehat{\mathbb{V}}_{s_G}\left[\hat R(x)\right]
+$$
+As always, rules of thumb should be treated with caution, but experience and simulation studies suggest that these approaches can provide close-to-nominal coverage for areas with $n_G$ as small as approximately 5--6 observations. For smaller areas, a model-based approach is generally required and is beyond the scope of this tutorial.
+
+Following the recommendation of Mandallaz (2013), confidence intervals can be improved by using the Student's $t$ distribution:
+$$
+\mathrm{CI}_{1-\alpha}(\hat{Y})
+=
+\hat{Y}
+\pm
+t_{n-p;\,1-\alpha/2}
+\sqrt{\hat{V}(\hat{Y})}.
+$$
+Although the $t$ distribution formally relies on an approximately normal sampling distribution, this is rarely problematic in practice. Moreover, the $t$ distribution is asymptotically normal, so its use is consistent with the preceding CLT-based theory.
+
+To illustrate the usage of the small area estimators use the following code to select some local publilc forests to target:
+
+```{r}
+#| eval: false
+
+# leaflet needs WGS84 projection so change to that
+doubs_wgs <- st_transform(doubs_public_forests, 4326)
+placettes_wgs <- st_transform(doubs_ONF_plots, 4326)
+
+# Interactive selection gadget
+select_forests_app <- function(forests, points) {
+  ui <- fluidPage(
+    tags$head(tags$style(type="text/css", "#map {height: calc(100vh - 80px) !important;}")),
+    leafletOutput("map"),
+    actionButton("done", "Done & Return Selected Names", class = "btn-primary", style = "margin-top: 10px;")
+  )
+  
+  server <- function(input, output, session) {
+    selected_ids <- reactiveVal(character(0))
+    
+    output$map <- renderLeaflet({
+      leaflet(forests) %>%
+        addProviderTiles(providers$CartoDB.Positron) %>%
+        addPolygons(
+          layerId = ~llib_frt,
+          fillColor = "lightgray",
+          fillOpacity = 0.5,
+          color = "gray",
+          weight = 1,
+          popup = ~llib_frt
+        ) %>%
+        addCircleMarkers(
+          data = points,
+          radius = 3,
+          color = "blue",
+          fillOpacity = 0.8
+        )
+    })
+    
+    observeEvent(input$map_shape_click, {
+      click <- input$map_shape_click
+      if (is.null(click$id)) return()
+      
+      current <- selected_ids()
+      if (click$id %in% current) {
+        current <- setdiff(current, click$id) # Unselect if clicked again
+      } else {
+        current <- c(current, click$id)       # Select on click
+      }
+      selected_ids(current)
+      
+      # Highlight selected features in red
+      selected_sf <- forests[forests$llib_frt %in% current, ]
+      leafletProxy("map") %>%
+        clearGroup("highlight")
+      
+      if (nrow(selected_sf) > 0) {
+        leafletProxy("map") %>%
+          addPolygons(
+            data = selected_sf,
+            group = "highlight",
+            fillColor = "red",
+            fillOpacity = 0.7,
+            color = "darkred",
+            weight = 2
+          )
+      }
+    })
+    
+    observeEvent(input$done, {
+      stopApp(selected_ids())
+    })
+  }
+  
+  # Opens in a dedicated window with fixed dimensions
+  runGadget(ui, server, viewer = dialogViewer("Forest Selector", width = 1000, height = 800))
+}
+
+# Launch the app
+target_small_areas <- select_forests_app(doubs_wgs, placettes_wgs)
+
+# Your areas you selected should be stored here
+target_small_areas
+```
+You can extract the forests you selected using filter...
+```{r}
+#| eval: false
+# You can extract them using filter...
+sample_plots |> filter(llib_frt %in% target_small_areas)
+```
+...or just added an indicator variable with mutate
+```{r}
+#| eval: false
+sample_plots |> mutate(in_target_area = llib_frt %in% target_small_areas)
+
+```
+Fit the model on the big sample to stabilize the estimate of the coefficients in the linear model and apply it with proper bias correction to your selected target area using a model-assisted SAE estimator.

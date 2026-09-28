@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Alexander Massey">
-<meta name="dcterms.date" content="2026-09-27">
+<meta name="dcterms.date" content="2026-09-28">
 
 <title>Model-assisted estimation</title>
 <style>
@@ -2375,6 +2375,7 @@ window.Quarto = {
   <li><a href="#compare-everything" id="toc-compare-everything" class="nav-link" data-scroll-target="#compare-everything"><span class="header-section-number">4.7</span> Compare everything</a></li>
   </ul></li>
   <li><a href="#model-assisted-versus-stratification" id="toc-model-assisted-versus-stratification" class="nav-link" data-scroll-target="#model-assisted-versus-stratification"><span class="header-section-number">5</span> Model-assisted versus stratification</a></li>
+  <li><a href="#model-assisted-small-area-estimation-sae" id="toc-model-assisted-small-area-estimation-sae" class="nav-link" data-scroll-target="#model-assisted-small-area-estimation-sae"><span class="header-section-number">6</span> Model-assisted Small Area Estimation (SAE)</a></li>
   </ul>
 </nav>
 </div>
@@ -2402,7 +2403,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">September 27, 2026</p>
+      <p class="date">September 28, 2026</p>
     </div>
   </div>
   
@@ -2415,7 +2416,7 @@ window.Quarto = {
 
 
 <div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>packages <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;sf&quot;</span>, <span class="st">&quot;terra&quot;</span>, <span class="st">&quot;tidyterra&quot;</span>, <span class="st">&quot;dplyr&quot;</span>, <span class="st">&quot;ggplot2&quot;</span>, <span class="st">&quot;tmap&quot;</span>, <span class="st">&quot;here&quot;</span>, <span class="st">&quot;tidyverse&quot;</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>packages <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;sf&quot;</span>, <span class="st">&quot;terra&quot;</span>, <span class="st">&quot;tidyterra&quot;</span>, <span class="st">&quot;dplyr&quot;</span>, <span class="st">&quot;ggplot2&quot;</span>, <span class="st">&quot;tmap&quot;</span>, <span class="st">&quot;here&quot;</span>, <span class="st">&quot;tidyverse&quot;</span>, <span class="st">&quot;leaflet&quot;</span>, <span class="st">&quot;shiny&quot;</span>)</span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>installed <span class="ot">&lt;-</span> <span class="fu">rownames</span>(<span class="fu">installed.packages</span>())</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>to_install <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(packages, installed)</span>
@@ -2430,7 +2431,10 @@ window.Quarto = {
 <span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
 <span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tmap)</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(here)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(tidyverse)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(leaflet)</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(shiny)</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(here)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 <section id="introduction" class="level1" data-number="1">
 <h1 data-number="1"><span class="header-section-number">1</span> Introduction</h1>
@@ -2772,7 +2776,7 @@ Y(x):= \mathbf{Z}(x)^t\boldsymbol{\beta} + R(x)
 </section>
 <section id="synthetic-estimate" class="level2" data-number="4.2">
 <h2 data-number="4.2" class="anchored" data-anchor-id="synthetic-estimate"><span class="header-section-number">4.2</span> Synthetic estimate</h2>
-<p>Compute the synthetic estimate two ways: first as the mean of predictions <em>at the plot locations</em>, then compare it conceptually to the exhaustive mean <code>exhaustive_vector$BA_pred_NFI</code>.</p>
+<p>Compute the synthetic estimate two ways: first as the mean of predictions <em>at the plot locations</em>, then compare it conceptually to the exhaustive mean <code>exhaustive_vector</code>.</p>
 <p><strong>NOTE:</strong> In this data, we were not provided the training data from the official NFI used to produce the kNN predictions so we can’t properly propagate the randomness to produce a confidence interval. Typically for kNN this is done using a bootstrap applied to all the wall-to-wall pixels. Be aware that the CIs for the synthetic estimator are often narrower than the model-assisted ones, which leads to getting <em>greedy</em> and desiring to trust it more.</p>
 <div class="callout callout-style-default callout-tip callout-titled">
 <div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
@@ -2840,7 +2844,7 @@ Y(x):= \mathbf{Z}(x)^t\boldsymbol{\beta} + R(x)
 <span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>(<span class="dv">1</span> <span class="sc">-</span> R2) <span class="sc">*</span> VY_1p                 <span class="co"># heuristic expected variance</span></span>
 <span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>Y_plugin  <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(<span class="fu">coefficients</span>(mod)[<span class="dv">1</span>] <span class="sc">+</span></span>
-<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>  exhaustive_vector<span class="sc">$</span>BA_pred_NFI <span class="sc">*</span> <span class="fu">coefficients</span>(mod)[<span class="dv">2</span>])</span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>  exhaustive_vector <span class="sc">*</span> <span class="fu">coefficients</span>(mod)[<span class="dv">2</span>])</span>
 <span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>VY_plugin <span class="ot">&lt;-</span> <span class="fu">var</span>(mod<span class="sc">$</span>residuals) <span class="sc">/</span> n</span>
 <span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>CI_Y_plugin <span class="ot">&lt;-</span> Y_plugin <span class="sc">+</span> z_score <span class="sc">*</span> <span class="fu">sqrt</span>(VY_plugin)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
@@ -2931,7 +2935,7 @@ Y(x):= \mathbf{Z}(x)^t\boldsymbol{\beta} + R(x)
 <span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;One-phase&quot;</span>, <span class="st">&quot;Synthetic&quot;</span>, <span class="st">&quot;Synthetic2&quot;</span>, <span class="st">&quot;Difference&quot;</span>,</span>
 <span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">&quot;Internal (Plug-in)&quot;</span>, <span class="st">&quot;Internal (g-weight)&quot;</span></span>
 <span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>  ),</span>
-<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate =</span> <span class="fu">c</span>(Y_1p, Y_syn, Y_syn2, Y_diff, Y_plugin, Y_plugin),</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">estimate =</span> <span class="fu">c</span>(Y_1p, Y_syn, Y_syn2, Y_diff, Y_gw, Y_plugin),</span>
 <span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">variance =</span> <span class="fu">c</span>(VY_1p, VY_syn, VY_syn2, VY_diff, VY_plugin, g_var),</span>
 <span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">lower =</span> <span class="fu">c</span>(</span>
 <span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a>    CI_Y_1p[<span class="dv">1</span>], CI_Y_syn[<span class="dv">1</span>], CI_Y_syn2[<span class="dv">1</span>],</span>
@@ -3269,6 +3273,127 @@ p_h=\frac{A_h}{A_T}
 </div>
 </div>
 </div>
+</section>
+<section id="model-assisted-small-area-estimation-sae" class="level1" data-number="6">
+<h1 data-number="6"><span class="header-section-number">6</span> Model-assisted Small Area Estimation (SAE)</h1>
+<p>The main idea behind model-assisted small area estimation is to fit the model using the full sample to obtain the regression coefficient vector <span class="math inline">\(\hat{\boldsymbol{\beta}}_s\)</span> and its design-based variance-covariance matrix <span class="math inline">\(\hat\Sigma_{\hat{\boldsymbol{\beta}}_s}\)</span>, and then use the fitted model to predict at sample locations within the small area <span class="math inline">\(G\)</span>. The small area estimate can then be variance-estimated either using the plug-in estimator under the external model assumption or using the <span class="math inline">\(g\)</span>-weight estimator. Two approaches are possible:</p>
+<ol type="1">
+<li>de-bias the small area estimate using the mean residual in <span class="math inline">\(G\)</span>, or</li>
+<li>include an indicator for <span class="math inline">\(G\)</span> in the model so that the mean residual in <span class="math inline">\(G\)</span> is zero by construction, and then use the <span class="math inline">\(g\)</span>-weight variance estimator.</li>
+</ol>
+<p>The general form of the first approach can be expressed as:</p>
+<p><span class="math display">\[
+\hat{Y}_{sae}=\bar{\mathbf Z}_G^\top\mathbf{\hat{\boldsymbol{\beta}}_s}+\frac{1}{n_G}\sum_{x\in {s_G}}\hat R(x),
+\qquad\qquad
+\hat{\mathbb V}[\hat{Y}_{sae}] =
+  \displaystyle
+  \bar{\mathbf Z}_G^\top
+  \hat\Sigma_{\hat{\boldsymbol{\beta}}_s}
+  \bar{\mathbf Z}_G + \frac{1}{n_G}\widehat{\mathbb{V}}_{s_G}\left[\hat R(x)\right]
+\]</span></p>
+<p>The second approach is the same except that the second terms are removed because the mean residual term is zero in <span class="math inline">\(G\)</span> by construction. Note that we could also do a plug-in approach under the external model assumption and the variance estimator would reduce to:</p>
+<p><span class="math display">\[
+\hat{\mathbb V}[\hat{Y}_{sae,external}]=\frac{1}{n_G}\widehat{\mathbb{V}}_{s_G}\left[\hat R(x)\right]
+\]</span> As always, rules of thumb should be treated with caution, but experience and simulation studies suggest that these approaches can provide close-to-nominal coverage for areas with <span class="math inline">\(n_G\)</span> as small as approximately 5–6 observations. For smaller areas, a model-based approach is generally required and is beyond the scope of this tutorial.</p>
+<p>Following the recommendation of Mandallaz (2013), confidence intervals can be improved by using the Student’s <span class="math inline">\(t\)</span> distribution: <span class="math display">\[
+\mathrm{CI}_{1-\alpha}(\hat{Y})
+=
+\hat{Y}
+\pm
+t_{n-p;\,1-\alpha/2}
+\sqrt{\hat{V}(\hat{Y})}.
+\]</span> Although the <span class="math inline">\(t\)</span> distribution formally relies on an approximately normal sampling distribution, this is rarely problematic in practice. Moreover, the <span class="math inline">\(t\)</span> distribution is asymptotically normal, so its use is consistent with the preceding CLT-based theory.</p>
+<p>To illustrate the usage of the small area estimators use the following code to select some local publilc forests to target:</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="co"># leaflet needs WGS84 projection so change to that</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>doubs_wgs <span class="ot">&lt;-</span> <span class="fu">st_transform</span>(doubs_public_forests, <span class="dv">4326</span>)</span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>placettes_wgs <span class="ot">&lt;-</span> <span class="fu">st_transform</span>(doubs_ONF_plots, <span class="dv">4326</span>)</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Interactive selection gadget</span></span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>select_forests_app <span class="ot">&lt;-</span> <span class="cf">function</span>(forests, points) {</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>  ui <span class="ot">&lt;-</span> <span class="fu">fluidPage</span>(</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>    tags<span class="sc">$</span><span class="fu">head</span>(tags<span class="sc">$</span><span class="fu">style</span>(<span class="at">type=</span><span class="st">&quot;text/css&quot;</span>, <span class="st">&quot;#map {height: calc(100vh - 80px) !important;}&quot;</span>)),</span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a>    <span class="fu">leafletOutput</span>(<span class="st">&quot;map&quot;</span>),</span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">actionButton</span>(<span class="st">&quot;done&quot;</span>, <span class="st">&quot;Done &amp; Return Selected Names&quot;</span>, <span class="at">class =</span> <span class="st">&quot;btn-primary&quot;</span>, <span class="at">style =</span> <span class="st">&quot;margin-top: 10px;&quot;</span>)</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb29-12"><a href="#cb29-12" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb29-13"><a href="#cb29-13" aria-hidden="true" tabindex="-1"></a>  server <span class="ot">&lt;-</span> <span class="cf">function</span>(input, output, session) {</span>
+<span id="cb29-14"><a href="#cb29-14" aria-hidden="true" tabindex="-1"></a>    selected_ids <span class="ot">&lt;-</span> <span class="fu">reactiveVal</span>(<span class="fu">character</span>(<span class="dv">0</span>))</span>
+<span id="cb29-15"><a href="#cb29-15" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb29-16"><a href="#cb29-16" aria-hidden="true" tabindex="-1"></a>    output<span class="sc">$</span>map <span class="ot">&lt;-</span> <span class="fu">renderLeaflet</span>({</span>
+<span id="cb29-17"><a href="#cb29-17" aria-hidden="true" tabindex="-1"></a>      <span class="fu">leaflet</span>(forests) <span class="sc">%&gt;%</span></span>
+<span id="cb29-18"><a href="#cb29-18" aria-hidden="true" tabindex="-1"></a>        <span class="fu">addProviderTiles</span>(providers<span class="sc">$</span>CartoDB.Positron) <span class="sc">%&gt;%</span></span>
+<span id="cb29-19"><a href="#cb29-19" aria-hidden="true" tabindex="-1"></a>        <span class="fu">addPolygons</span>(</span>
+<span id="cb29-20"><a href="#cb29-20" aria-hidden="true" tabindex="-1"></a>          <span class="at">layerId =</span> <span class="sc">~</span>llib_frt,</span>
+<span id="cb29-21"><a href="#cb29-21" aria-hidden="true" tabindex="-1"></a>          <span class="at">fillColor =</span> <span class="st">&quot;lightgray&quot;</span>,</span>
+<span id="cb29-22"><a href="#cb29-22" aria-hidden="true" tabindex="-1"></a>          <span class="at">fillOpacity =</span> <span class="fl">0.5</span>,</span>
+<span id="cb29-23"><a href="#cb29-23" aria-hidden="true" tabindex="-1"></a>          <span class="at">color =</span> <span class="st">&quot;gray&quot;</span>,</span>
+<span id="cb29-24"><a href="#cb29-24" aria-hidden="true" tabindex="-1"></a>          <span class="at">weight =</span> <span class="dv">1</span>,</span>
+<span id="cb29-25"><a href="#cb29-25" aria-hidden="true" tabindex="-1"></a>          <span class="at">popup =</span> <span class="sc">~</span>llib_frt</span>
+<span id="cb29-26"><a href="#cb29-26" aria-hidden="true" tabindex="-1"></a>        ) <span class="sc">%&gt;%</span></span>
+<span id="cb29-27"><a href="#cb29-27" aria-hidden="true" tabindex="-1"></a>        <span class="fu">addCircleMarkers</span>(</span>
+<span id="cb29-28"><a href="#cb29-28" aria-hidden="true" tabindex="-1"></a>          <span class="at">data =</span> points,</span>
+<span id="cb29-29"><a href="#cb29-29" aria-hidden="true" tabindex="-1"></a>          <span class="at">radius =</span> <span class="dv">3</span>,</span>
+<span id="cb29-30"><a href="#cb29-30" aria-hidden="true" tabindex="-1"></a>          <span class="at">color =</span> <span class="st">&quot;blue&quot;</span>,</span>
+<span id="cb29-31"><a href="#cb29-31" aria-hidden="true" tabindex="-1"></a>          <span class="at">fillOpacity =</span> <span class="fl">0.8</span></span>
+<span id="cb29-32"><a href="#cb29-32" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb29-33"><a href="#cb29-33" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb29-34"><a href="#cb29-34" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb29-35"><a href="#cb29-35" aria-hidden="true" tabindex="-1"></a>    <span class="fu">observeEvent</span>(input<span class="sc">$</span>map_shape_click, {</span>
+<span id="cb29-36"><a href="#cb29-36" aria-hidden="true" tabindex="-1"></a>      click <span class="ot">&lt;-</span> input<span class="sc">$</span>map_shape_click</span>
+<span id="cb29-37"><a href="#cb29-37" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">is.null</span>(click<span class="sc">$</span>id)) <span class="fu">return</span>()</span>
+<span id="cb29-38"><a href="#cb29-38" aria-hidden="true" tabindex="-1"></a>      </span>
+<span id="cb29-39"><a href="#cb29-39" aria-hidden="true" tabindex="-1"></a>      current <span class="ot">&lt;-</span> <span class="fu">selected_ids</span>()</span>
+<span id="cb29-40"><a href="#cb29-40" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (click<span class="sc">$</span>id <span class="sc">%in%</span> current) {</span>
+<span id="cb29-41"><a href="#cb29-41" aria-hidden="true" tabindex="-1"></a>        current <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(current, click<span class="sc">$</span>id) <span class="co"># Unselect if clicked again</span></span>
+<span id="cb29-42"><a href="#cb29-42" aria-hidden="true" tabindex="-1"></a>      } <span class="cf">else</span> {</span>
+<span id="cb29-43"><a href="#cb29-43" aria-hidden="true" tabindex="-1"></a>        current <span class="ot">&lt;-</span> <span class="fu">c</span>(current, click<span class="sc">$</span>id)       <span class="co"># Select on click</span></span>
+<span id="cb29-44"><a href="#cb29-44" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb29-45"><a href="#cb29-45" aria-hidden="true" tabindex="-1"></a>      <span class="fu">selected_ids</span>(current)</span>
+<span id="cb29-46"><a href="#cb29-46" aria-hidden="true" tabindex="-1"></a>      </span>
+<span id="cb29-47"><a href="#cb29-47" aria-hidden="true" tabindex="-1"></a>      <span class="co"># Highlight selected features in red</span></span>
+<span id="cb29-48"><a href="#cb29-48" aria-hidden="true" tabindex="-1"></a>      selected_sf <span class="ot">&lt;-</span> forests[forests<span class="sc">$</span>llib_frt <span class="sc">%in%</span> current, ]</span>
+<span id="cb29-49"><a href="#cb29-49" aria-hidden="true" tabindex="-1"></a>      <span class="fu">leafletProxy</span>(<span class="st">&quot;map&quot;</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb29-50"><a href="#cb29-50" aria-hidden="true" tabindex="-1"></a>        <span class="fu">clearGroup</span>(<span class="st">&quot;highlight&quot;</span>)</span>
+<span id="cb29-51"><a href="#cb29-51" aria-hidden="true" tabindex="-1"></a>      </span>
+<span id="cb29-52"><a href="#cb29-52" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">nrow</span>(selected_sf) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb29-53"><a href="#cb29-53" aria-hidden="true" tabindex="-1"></a>        <span class="fu">leafletProxy</span>(<span class="st">&quot;map&quot;</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb29-54"><a href="#cb29-54" aria-hidden="true" tabindex="-1"></a>          <span class="fu">addPolygons</span>(</span>
+<span id="cb29-55"><a href="#cb29-55" aria-hidden="true" tabindex="-1"></a>            <span class="at">data =</span> selected_sf,</span>
+<span id="cb29-56"><a href="#cb29-56" aria-hidden="true" tabindex="-1"></a>            <span class="at">group =</span> <span class="st">&quot;highlight&quot;</span>,</span>
+<span id="cb29-57"><a href="#cb29-57" aria-hidden="true" tabindex="-1"></a>            <span class="at">fillColor =</span> <span class="st">&quot;red&quot;</span>,</span>
+<span id="cb29-58"><a href="#cb29-58" aria-hidden="true" tabindex="-1"></a>            <span class="at">fillOpacity =</span> <span class="fl">0.7</span>,</span>
+<span id="cb29-59"><a href="#cb29-59" aria-hidden="true" tabindex="-1"></a>            <span class="at">color =</span> <span class="st">&quot;darkred&quot;</span>,</span>
+<span id="cb29-60"><a href="#cb29-60" aria-hidden="true" tabindex="-1"></a>            <span class="at">weight =</span> <span class="dv">2</span></span>
+<span id="cb29-61"><a href="#cb29-61" aria-hidden="true" tabindex="-1"></a>          )</span>
+<span id="cb29-62"><a href="#cb29-62" aria-hidden="true" tabindex="-1"></a>      }</span>
+<span id="cb29-63"><a href="#cb29-63" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb29-64"><a href="#cb29-64" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb29-65"><a href="#cb29-65" aria-hidden="true" tabindex="-1"></a>    <span class="fu">observeEvent</span>(input<span class="sc">$</span>done, {</span>
+<span id="cb29-66"><a href="#cb29-66" aria-hidden="true" tabindex="-1"></a>      <span class="fu">stopApp</span>(<span class="fu">selected_ids</span>())</span>
+<span id="cb29-67"><a href="#cb29-67" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb29-68"><a href="#cb29-68" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb29-69"><a href="#cb29-69" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb29-70"><a href="#cb29-70" aria-hidden="true" tabindex="-1"></a>  <span class="co"># Opens in a dedicated window with fixed dimensions</span></span>
+<span id="cb29-71"><a href="#cb29-71" aria-hidden="true" tabindex="-1"></a>  <span class="fu">runGadget</span>(ui, server, <span class="at">viewer =</span> <span class="fu">dialogViewer</span>(<span class="st">&quot;Forest Selector&quot;</span>, <span class="at">width =</span> <span class="dv">1000</span>, <span class="at">height =</span> <span class="dv">800</span>))</span>
+<span id="cb29-72"><a href="#cb29-72" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb29-73"><a href="#cb29-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-74"><a href="#cb29-74" aria-hidden="true" tabindex="-1"></a><span class="co"># Launch the app</span></span>
+<span id="cb29-75"><a href="#cb29-75" aria-hidden="true" tabindex="-1"></a>target_small_areas <span class="ot">&lt;-</span> <span class="fu">select_forests_app</span>(doubs_wgs, placettes_wgs)</span>
+<span id="cb29-76"><a href="#cb29-76" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-77"><a href="#cb29-77" aria-hidden="true" tabindex="-1"></a><span class="co"># Your areas you selected should be stored here</span></span>
+<span id="cb29-78"><a href="#cb29-78" aria-hidden="true" tabindex="-1"></a>target_small_areas</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>You can extract the forests you selected using filter…</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a><span class="co"># You can extract them using filter...</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>sample_plots <span class="sc">|&gt;</span> <span class="fu">filter</span>(llib_frt <span class="sc">%in%</span> target_small_areas)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>…or just added an indicator variable with mutate</p>
+<div class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a>sample_plots <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">in_target_area =</span> llib_frt <span class="sc">%in%</span> target_small_areas)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Fit the model on the big sample to stabilize the estimate of the coefficients in the linear model and apply it with proper bias correction to your selected target area using a model-assisted SAE estimator.</p>
 </section>
 
 </main>
