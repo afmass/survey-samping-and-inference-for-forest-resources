@@ -146,7 +146,7 @@ true_mean <- 45.16667
 
 # Inputs
 # Note: strategy2() function only takes values n = 12*(x^2) (x = 1,2,3,etc)
-n <- 768  # try 12, 48, 108, 192, 300, 432, 768, etc...
+n <- 108  # try 12, 48, 108, 192, 300, 432, 768, etc...
 n_sim <- 1000
 
 
